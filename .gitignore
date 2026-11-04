@@ -1,0 +1,22 @@
+build/
+*.o
+__pycache__/
+*.bmp
+*.app/
+# Never commit game data or derived assets
+*.FS
+*.DLL
+*.dll
+*.ISO
+*.iso
+*.ETV
+*.etv
+*.ESF
+*.TGA
+*.Z
+*.mp4
+assets/
+videos/
+analysis/
+screenshots/
+.DS_Store
