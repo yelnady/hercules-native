@@ -4,6 +4,11 @@ A native **Apple-Silicon (macOS)** re-implementation of the engine behind *Disne
 
 > **You need your own copy of the game.** This repository contains no game data, no original binaries and no decompiled code. The engine loads the scripts, tables and assets from *your* game files at runtime. Not affiliated with or endorsed by Disney. "Hercules" and all game content belong to their owners.
 
+<p align="center">
+<img src="docs/img/TRAINING.png" width="32%"> <img src="docs/img/FOREST.png" width="32%"> <img src="docs/img/THEBES.png" width="32%">
+</p>
+<p align="center"><sub>Training, Forest and Thebes, rendered by this engine from the original game's own data. Screenshots shown for documentation.</sub></p>
+
 ## Status
 
 Playable end to end on a Mac, with all levels ported: Training, Forest, Thebes, Hydra, Medusa, Titans, Vortex and the three "ENG3" levels (Cyclops, Gauntlet, Torment). The original boot flow, title screen, password screen, cutscene videos, save/continue and sound effects are in.
@@ -12,6 +17,10 @@ Known gaps:
 - **No music.** It is CD-audio on the original disc, not in the game files. Drop your own ripped audio in if you want to extend this.
 - Hydra stage lighting, the checkpoint sparkle shower and the pickup glow are not ported.
 - Many enemies and objects have been verified against the original code only in headless scripted runs; expect rough edges. Bug reports are welcome (include the build line shown in the menu corner).
+
+## Getting the game
+
+This project can't tell you where to download the game, and it will never host or link to copies. The 1997 PC CD-ROM release is out of print; legitimate routes are your own original disc (rip it to an ISO) or a second-hand copy. Once you have the disc image, extract the files listed below.
 
 ## Build and run
 
