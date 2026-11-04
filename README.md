@@ -22,6 +22,21 @@ Known gaps:
 
 This project can't tell you where to download the game, and it will never host or link to copies. The 1997 PC CD-ROM release is out of print; legitimate routes are your own original disc (rip it to an ISO) or a second-hand copy. Once you have the disc image, extract the files listed below.
 
+## Why there is no ready-made `.app` (or game files) in this repo
+
+On purpose, for legal reasons. A runnable `Hercules.app` would have to bundle the original `HERCULES.FS`, the game DLLs and the cutscene videos, and those are Disney's copyrighted material. Redistributing them (in the repo, in a release, or on a mirror) is not something I can do, and a takedown would remove all the reverse-engineering work along with it. So the repository holds only what is mine:
+
+| In this repo | Not in this repo (bring your own) |
+|---|---|
+| Engine source (`src/`), `Makefile`, `make_app.sh` | `HERCULES.FS`, `ENG1.DLL`, `ENG3.DLL`, `TITLE.DLL`, `DATA/*.ETV` |
+| Format decoders and a Ghidra script (`tools/`) | The disc image and everything extracted from it |
+| My research notes (`docs/notes/`) | Decompiled original code, sprites, sounds, videos, music |
+| Screenshots for documentation | A prebuilt `Hercules.app` (it embeds the files above) |
+
+`./make_app.sh /path/to/your/game_files` builds the app on your Mac from your own copy in about a minute.
+
+Why the engine still works this way: it is a re-implementation, not a copy. It reads the level scripts, animation tables and assets from the files you supply at runtime, so nothing of the original has to ship with it.
+
 ## Build and run
 
 Requires macOS, a C compiler and SDL2 (`brew install sdl2`).
@@ -49,6 +64,10 @@ Layout:
 - `src/` — the engine (`render.c`, `player.c`, `objects.c`, `enemies*.c`, `bosses.c`, `training.c`, `e3*.c`, `frontend.c`, `sfx.c`, ...)
 - `tools/` — Python tools to decode the formats (`herc_fs.py`, `assets.py`, `sprites.py`, `levels.py`, `etv.py`) and a Ghidra script
 - `docs/notes/` — research and porting notes
+
+## Found something else? Tell me
+
+If you have anything that would help and is yours to share, open an issue or a pull request: a different release or language version of the game that behaves differently, original behaviour you have observed that this engine gets wrong, a better extractor for the installer archive, or a way to support the music track. Bug reports are most useful with the build line shown in the menu corner and the level and place where it happened. Please never attach game files or ripped assets; describe them instead.
 
 ## Contributing
 
