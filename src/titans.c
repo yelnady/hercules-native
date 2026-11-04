@@ -153,6 +153,16 @@ static void peg_hurt(Game *G, int level)
     set_children(G, 0x10063350, 0x10063378);
 }
 
+/* FXB: the Titans actors call FUN_10037e30 directly while the objects update (FUN_10025d00), i.e. in the SAME frame as the
+ * overlap; the port routes it through player_damage's request, so apply it right after the objects ran (game.c) instead of
+ * at the start of the next Pegasus tick. */
+void titans_apply_hits(Game *G)
+{
+    if (!G->T.active || !G->P.hit_req) return;
+    peg_hurt(G, (G->P.hit_req - 1) & 0xf);
+    G->P.hit_req = 0;
+}
+
 void titans_start(Game *G, int x, int y, int z)
 {
     TitansState *T = &G->T;
@@ -345,7 +355,7 @@ void titans_tick(Game *G, uint16_t pad, uint16_t pressed)
         if (T->anim_done) {
             set_anim(G, 7); T->state = 0x4d;
             Spawn *sp = &P->spawns[P->nspawns++];
-            sp->id = 0x4005; sp->x = T->x + 0x200000; sp->y = T->y + 0x140000; sp->z = T->z; sp->facing = 0;
+            sp->id = 0x4005; sp->x = T->x + 0x200000; sp->y = T->y + 0x140000; sp->z = T->z; sp->facing = 0; sp->aim = 0;   /* FXW: DAT_1006ef78 */
             if (--P->ammo[2] < 1) { P->ammo[2] = 0; P->weapon = 0; }
         }
         break;

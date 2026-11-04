@@ -266,6 +266,13 @@ int render_sprite_fx(Renderer *R, const Image *img, float wx, float wy, float wz
     return 1;
 }
 
+/* FXW: draw mode 5 with flags54 0x2000 (FUN_10030a20): the ordering-table depth is obj+0x3e (the player's depth - 0x10 for the
+ * weapon effects), not the object's own SZ. Overrides the key of the sprite queued last. */
+void render_last_depth(Renderer *R, float depth)
+{
+    if (R->nitems) ((Item *)R->items)[R->nitems - 1].key = floorf(depth) + sprite_ot_bias(R) + sprite_tiebreak(R, -4.0f);
+}
+
 void render_last_angle(Renderer *R, float ang)
 {
     if (R->nitems) ((Item *)R->items)[R->nitems - 1].spr.ang = ang;

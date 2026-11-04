@@ -65,6 +65,8 @@ int render_project(const Renderer *R, float wx, float wy, float wz, float *sx, f
 /* RENDERFIX: rotate the sprite queued last about its hotspot (angle in 4096ths of a turn): ENG1 draw functions 10004330 / 100048b0 are
  * used whenever obj+0x74 (rot[2], x4 = GTE angle) is non-zero. */
 void render_last_angle(Renderer *R, float ang);
+/* FXW: override the ordering-table depth (SZ>>2, integer slots) of the sprite queued last. */
+void render_last_depth(Renderer *R, float depth);
 
 /* FX: sprite with PSX colour modulation (tint 0x00RRGGBB, 0x80 per channel = unchanged), blend mode (-1 opaque,
  * 0..3 PSX abr) and vertical scale ysc (negative = upside down, for water reflections). scale 0x100 = 1. */

@@ -35,7 +35,7 @@ typedef struct { int x0, y0, z0, x1, y1, z1; } Box;
 
 /* Effect / projectile object the player's scripts ask the object system to create (script ops 0x22 / 0x23,
  * FUN_10030180 / FUN_100300c0). id = ENG1 object type (e.g. 0x4005 lightning bolt). Positions 16.16. */
-typedef struct { int id; int32_t x, y, z; int facing; } Spawn;
+typedef struct { int id; int32_t x, y, z; int facing; int aim; } Spawn;   /* FXW: aim = DAT_1006ef78, the fire-direction table row at spawn time */
 
 /* Gifts of the Gods (DAT_1006efb4). */
 enum { WPN_NONE, WPN_FIREBALL, WPN_LIGHTNING, WPN_SONIC, WPN_INVULNERABLE };

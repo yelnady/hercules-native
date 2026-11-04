@@ -85,5 +85,6 @@ void eng3_game_tick(Game *G, int in);
 void eng3_game_draw(Game *G);
 void titans_start(Game *G, int x, int y, int z);
 void titans_tick(Game *G, uint16_t pad, uint16_t pressed);
+void titans_apply_hits(Game *G);      /* FXB */
 void titans_sync_player(Game *G);
 void titans_draw(Game *G, Renderer *R);

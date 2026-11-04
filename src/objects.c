@@ -476,6 +476,7 @@ static Object *spawn_type(Objects *O, uint16_t type, int32_t x, int32_t y, int32
         o->movei = 0; o->moving = 1;                         /* FUN_100292c0 */
         drop_to_floor(O, o);
         o->facing = rnd(O, 2) ? 0xff : 0;
+    } else if ((type & 0x7000) != 0 && fxw_init(O, o, init)) {         /* FXW: weapon / hit effect objects */
     } else if ((type & 0x7000) == 0 && titans_ai_init(O, o, init)) {   /* TITANS2: level-9 actors */
         if (o->used) o->kind = K_TITAN;
     } else if (solids_init(O, o, init, 0)) {                    /* SOLIDS: models, groups, platforms */
@@ -737,6 +738,7 @@ void objects_tick(Objects *O, Player *P, float camx)
             P->o.x = P->o.px = FX(tx); P->o.y = P->o.py = FX(ty); P->o.z = P->o.pz = FX(tz);
         }
     }
+    fxw_frame(O);               /* FXW: stream chain */
     enemies_player_spawns(O);   /* ENEMIES: weapon effects the player's scripts asked for */
     enemies2_frame(O);          /* ENEMIES2: level per-frame hooks (mini-boss bars, Training lessons) */
     nessus_frame(O);            /* NESSUS */
@@ -821,6 +823,7 @@ void objects_tick(Objects *O, Player *P, float camx)
         case K_CHECKPOINT: upd_checkpoint(O, o, pbox); break;
         case K_GENERIC1: upd_generic1(O, o, cx); break;
         case K_ACTOR: upd_actor(O, o); break;
+        case K_FXW: fxw_tick(O, o); break;          /* FXW */
         case K_EFFECT:
             if (o->ai) { enemies_tick_proj(O, o); break; }   /* ENEMIES: projectiles */
             if (run_words(O, o) || --o->life <= 0) kill_obj(O, o, 1);
@@ -842,6 +845,8 @@ void objects_draw(Objects *O, Renderer *R)
     obj_scrolls_draw(O, R);     /* AUDSHELL: screen-space, sorted by key only */
     solids_draw_reset();        /* SOLIDS */
     bosses_draw_begin();    /* BOSSES */
+    fxw_draw(O, R);         /* FXW: stream chain */
+    float fxw_pd = -1;
     for (int i = 0; i < OBJ_MAX; i++) {
         Object *o = &O->obj[i];
         if (o->used && o->kind == K_BOSS) { boss_draw(O, R, o); continue; }   /* BOSSES */
@@ -871,9 +876,14 @@ void objects_draw(Objects *O, Renderer *R)
             }
             int mode = (o->flags54 & 4) ? (int)(o->flags54 & 3) : o->semi ? 1 : -1;
             if (!fx3_draw_mode(O, R, o, img, wx, o->y / 65536.0f, wz, tint, mode)) {   /* FX3: draw modes 4 / 7 / 8 */
-                if (render_sprite_fx(R, img, wx, o->y / 65536.0f, wz, (o->flags54 & 0x10) != 0, -4, o->scale, tint, mode, 1.0f) &&
-                    (o->rot[2] & 0x3ff))     /* RENDERFIX: obj+0x74 != 0 selects the rotated draw (FUN_10004330 / 100048b0) */
-                { if (getenv("ROT_LOG")) fprintf(stderr, "ROTSPRITE type %04x rot2 %d\n", o->type, o->rot[2]); render_last_angle(R, (float)(o->rot[2] * 4)); }
+                if (render_sprite_fx(R, img, wx, o->y / 65536.0f, wz, (o->flags54 & 0x10) != 0, -4, o->scale, tint, mode, 1.0f)) {
+                    if (o->fxwd && O->P) {      /* FXW: flags54 0x2000: ordering-table depth = obj+0x3e (player depth + offset) */
+                        if (fxw_pd < 0) fxw_pd = fxw_player_depth(O, R);
+                        render_last_depth(R, fxw_pd + o->fxw_dd);
+                    }
+                    if (o->rot[2] & 0x3ff)     /* RENDERFIX: obj+0x74 != 0 selects the rotated draw (FUN_10004330 / 100048b0) */
+                    { if (getenv("ROT_LOG")) fprintf(stderr, "ROTSPRITE type %04x rot2 %d\n", o->type, o->rot[2]); render_last_angle(R, (float)(o->rot[2] * 4)); }
+                }
             }
         }
         if (!fx_has_shadow(o->init_fn) && (o->flags54 & 8))   /* FX: flags54 & 8 floor shadow (FUN_10003cd0 -> FUN_10030790) */

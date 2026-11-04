@@ -82,6 +82,7 @@ typedef struct Object {
     int route;                  /* ENEMIES3: +0x11c Phil's route index */
     uint8_t palx;               /* LEFTOVERS: +0x1c palette override + 1 (0 = the frame's own, i.e. 0xff) */
     uint32_t mesh; int16_t mesh_n;   /* FX3: draw mode 4 sprite mesh (+0x5c records, +0x36 count; FUN_10026700) */
+    int16_t fxw_dd; uint8_t fxwd;   /* FXW: flags54 0x2000: sorted at the player's depth + fxw_dd (obj+0x3e, FUN_10030a20) */
     uint8_t hidden;             /* LEFTOVERS: flags54 bit 31 clear in the original's "shown" sense: not drawn */
     struct Object *carrier, *victim;   /* LEFTOVERS: harpy food +0xe4 (who carries it) / harpy +0xe8 (what it carries) */
 } Object;

@@ -104,6 +104,8 @@ static int took_hit(Objects *O, Object *o, int k)
         if (!p->used || p->kind != K_EFFECT || p->ai != 6 || p->life <= 0) continue;
         int X = I(p->x), Y = I(p->y), Z = I(p->z);
         int pb[6] = {X - 10, Y - 10, Z - 24, X + 10, Y + 10, Z + 24};
+        if (p->type == 0x4001) { pb[0] = X - 8; pb[3] = X + 8; pb[1] = Y - 8; pb[4] = Y + 0x18; pb[2] = Z - 0x10; pb[5] = Z + 0x10; }   /* FXW: stream segment box */
+        if (fxw_proj_box(O, p, pb) == 0) continue;     /* FXW: sonic orb frame box 2 (first orb only) */
         if (obj_boxes_overlap(pb, b)) { if (p->variant != 2) p->life = 0; return 2; }   /* FUN_10030290 */
     }
     Box ab;

@@ -2,6 +2,7 @@
 #include "player.h"
 #include <stdlib.h>
 #include <string.h>
+long fxb_player_ticks;                                  /* FXB: tick counter for FXB_LOG */
 
 /* Animation scripts (ENG1 virtual addresses). */
 enum {
@@ -161,7 +162,11 @@ static void spawn(Player *P, int id)
 {
     if (P->nspawns >= 4) return;
     Spawn *s = &P->spawns[P->nspawns++];
-    s->id = id; s->x = P->o.x; s->y = P->o.y; s->z = P->o.z; s->facing = P->o.facing;
+    s->id = id; s->x = P->o.x; s->y = P->o.y; s->z = P->o.z; s->facing = P->o.facing; s->aim = P->aim_idx;   /* FXW */
+    if (id == 0x4005 && P->weapon_timer[P->weapon] == 0) {          /* FXW: FUN_10019f50: every bolt costs 12 charges */
+        P->ammo[P->weapon] -= 12;
+        if (P->ammo[P->weapon] < 1) { P->ammo[P->weapon] = 0; P->weapon = WPN_NONE; }
+    }
 }
 
 static void flame_start(Player *P) { P->flame.active = 1; }            /* FUN_1001a3e0 */
@@ -223,7 +228,7 @@ static int run_script(Player *P)
         case 0x03: P->carry_pose = arg; break;              /* pose index for the carried object */
         case 0x0b: P->sonic_active = 0; break;
         case 0x0c:                                          /* start the two sonic-sword objects */
-            if (!P->sonic_active) { spawn(P, 0x4006); spawn(P, 0x4006); }
+            spawn(P, 0x4006); spawn(P, 0x4006);     /* FXW: FUN_1001a220 re-places (and restarts) live orbs on every execution */
             P->sonic_active = 1;
             break;
         case 0x18: o->frame = (int16_t)P->dyn_frame; o->timer = (int16_t)arg; return 0;   /* aimed pose */
@@ -706,6 +711,7 @@ static void take_damage(Player *P)
     P->hit_req &= ~0x10;
     int lvl = P->hit_req;
     if (lvl < 2) nomove = 1;
+    if (getenv("FXB_LOG") && lvl) printf("FXB pt=%ld take_damage req=%d invuln=%d state=%d hp=%d -> %s\n", fxb_player_ticks, lvl, P->invuln, P->state, P->health, (P->invuln || P->weapon == WPN_INVULNERABLE) ? "DROPPED (invulnerable)" : "APPLIED");
     if (lvl == 0 || P->invuln || P->weapon == WPN_INVULNERABLE) return;
     switch (P->state) {
     case ST_IDLE: case ST_WALK: case ST_SKID: case ST_TURN: case ST_LAND: case ST_CROUCH: case ST_SWORD:
@@ -1289,6 +1295,7 @@ void player_init(Player *P, const PeImage *pe, const Level *L, int x, int y, int
 void player_tick(Player *P, uint16_t pad)
 {
     Obj *o = &P->o;
+    fxb_player_ticks++;
     if (P->dying || P->won) pad &= (uint16_t)~(P->m_sword | P->m_jump | P->m_punch | P->m_power | PAD_DOWN);
     P->pressed = pad & ~P->pad;
     P->pad = pad;
@@ -1392,6 +1399,15 @@ void player_tick(Player *P, uint16_t pad)
     default: go_idle(P); break;
     }
     if (P->state != ST_FIRE) flame_stop(P);
+    if (getenv("FXI_LOG"))      /* FXI: per-tick state log (debug hook) */
+        printf("FXI pad=%04x pr=%04x st=%2d fac=%02x vx=%6x tgt=%6x acc=%5x asp=%6x vy=%7x x=%d y=%d fr=%d jk=%d\n",
+               P->pad, P->pressed, P->state, o->facing, o->vx, o->vx_target, o->vx_acc, o->air_speed, o->vy, I(o->x), I(o->y), o->frame, P->jump_kind);
+    /* FXB: FUN_100156a0 clears DAT_1006feb4 right after FUN_10015780 (which applies the request through FUN_10018c50)
+     * EVERY tick.  A request made while Hercules is invulnerable (or in the hurt reaction) is therefore dropped, not
+     * kept: keeping it replayed the last overlapping bird/projectile as a second hit the moment the ~30 tick
+     * invulnerability ran out ("the hit comes about a second after he was hit").  (combat_notes.md's "stays pending"
+     * only meant "not applied this tick".) */
+    P->hit_req = 0;
     P->touch_obj = NULL; P->touch_type = 0;     /* the object system sets these again before the next tick */
 }
 
@@ -1466,6 +1482,7 @@ int player_hit_damage(Player *P, uint16_t mask)     /* FUN_10019b40 */
 
 int player_damage(Player *P, int level, int32_t src_x, int32_t src_y, int32_t src_z, int kind)  /* FUN_100266a0 */
 {
+    if (getenv("FXB_LOG")) printf("FXB pt=%ld player_damage request level=%d invuln=%d\n", fxb_player_ticks, level, P->invuln);
     const Obj *o = &P->o;
     if (getenv("HIT_LOG")) printf("HIT_LOG player_damage level=%d from (%d,%d,%d) invuln=%d\n", level, src_x >> 16, src_y >> 16, src_z >> 16, P->invuln);
     if (P->weapon == WPN_INVULNERABLE) return 0;

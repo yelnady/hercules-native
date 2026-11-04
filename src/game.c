@@ -200,6 +200,10 @@ void game_tick(Game *G, int in)
     const Level *L = &G->L;
     if (L->eng3) { eng3_game_tick(G, in); return; }        /* LEVELS */
     G->ticks++;
+    if (getenv("WEAPON")) {   /* FXW: test hook WEAPON=n (1 fire, 2 lightning, 3 sonic, 4 invulnerable) selects a Gift with full charges */
+        int w = atoi(getenv("WEAPON"));
+        if (w >= 1 && w <= 4) { if (G->ticks == 1 || G->P.ammo[w] < 200) { G->P.ammo[w] = 255; } if (G->ticks == 1) G->P.weapon = w; }
+    }
     if (G->P.fade_req) { G->P.fade_req = 0; G->fade_dir = -8; }       /* PLAYER: script op 0x2a (death fade out) */
     if (G->fade_dir) {                                                /* FUN_10005d50 */
         G->fade += G->fade_dir;
@@ -237,6 +241,7 @@ void game_tick(Game *G, int in)
     if (G->have_objects) {
         G->O.cam_y = (int)G->camy;   /* FX2 */
         objects_tick(&G->O, &G->P, G->camx);   /* OBJECTS */
+        titans_apply_hits(G);                  /* FXB: Titans actors hurt Pegasus in the frame they touch it (FUN_10037e30) */
         for (int k = 0; k < OBJ_MAX; k++)       /* FX2: Forest water 0x4b (FUN_1000d460): scroll texture record 0 by -16 a frame */
             if (G->O.obj[k].used && G->O.obj[k].type == 0x4b && G->L.index == 3) { fx2_tex_scroll(&G->L, 0, 0, -16); break; }
         {   /* FX2: FUN_10026730 - DAT_10070d18 eases toward the DAT_10071848 request each tick */

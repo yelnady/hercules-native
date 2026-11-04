@@ -36,5 +36,11 @@ int input_load(InputConfig *c);
 int input_save(const InputConfig *c);
 /* In-game action bits (game.h IN_*) from the keyboard state and an optional controller. */
 int input_game_bits(const InputConfig *c, const Uint8 *ks, SDL_GameController *pad);
+/* FXI: host pad filter (HERCULES.EXE FUN_00408040): UP beats DOWN, LEFT beats RIGHT. */
+int input_socd(int in);
+/* FXI: remember a key-down until the next game tick; input_game_tick = held state | latched taps, then SOCD. */
+void input_note_key(const InputConfig *c, SDL_Scancode sc);
+void input_latch_clear(void);
+int input_game_tick(const InputConfig *c, const Uint8 *ks, SDL_GameController *pad);
 /* PSX pad word for the front end (menus/password/cards). */
 uint16_t input_menu_pad(const InputConfig *c, const Uint8 *ks, SDL_GameController *pad);

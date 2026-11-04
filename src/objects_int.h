@@ -5,7 +5,7 @@
 #define FX(v) ((int32_t)(v) * 65536)
 #define I(v) ((v) >> 16)
 
-enum { K_NONE, K_PICKUP, K_CHECKPOINT, K_EFFECT, K_ACTOR, K_GENERIC1, K_ENEMY, K_DEBRIS, K_SOLID /* SOLIDS */, K_BOSS /* BOSSES */, K_TITAN /* TITANS2 */ };
+enum { K_NONE, K_PICKUP, K_CHECKPOINT, K_EFFECT, K_ACTOR, K_GENERIC1, K_ENEMY, K_DEBRIS, K_SOLID /* SOLIDS */, K_BOSS /* BOSSES */, K_TITAN /* TITANS2 */, K_FXW /* FXW: weapon / hit effect objects (fxw.c) */ };
 
 int obj_rnd(Objects *O, int n);                                  /* FUN_1002c460 */
 void obj_sound(Objects *O, int id, int32_t x);                   /* FUN_10006da0 */
@@ -108,3 +108,14 @@ void boss_model_chain(Objects *O, Renderer *R, const Object *o, int xf, uint32_t
 void obj_scrolls_trigger(Objects *O, int id);
 void obj_scrolls_tick(Objects *O);
 void obj_scrolls_draw(Objects *O, Renderer *R);
+
+/* FXW: fxw.c - Gift of the Gods effects (stream, bolt, sonic orbs), sparks, trails, explosions */
+int fxw_init(Objects *O, Object *o, uint32_t init);              /* 1 if the init handler is ported (0x2003 / 0x2010 / 0x4008 / 0x4009) */
+void fxw_tick(Objects *O, Object *o);                            /* K_FXW update */
+int fxw_proj_tick(Objects *O, Object *o);                        /* AI_PROJ player weapon objects: 1 if handled (0x4005 / 0x4006) */
+void fxw_spawns(Objects *O);                                     /* P->spawns + P->flame: creates the weapon effects (replaces the old enemies.c code) */
+void fxw_frame(Objects *O);                                      /* per tick: the fireball/lightning stream chain */
+void fxw_draw(Objects *O, Renderer *R);                          /* stream chain and its afterimages */
+float fxw_player_depth(Objects *O, Renderer *R);                 /* player sprite depth (SZ>>2) */
+int fxw_proj_box(Objects *O, Object *p, int box[6]);             /* hit box of a weapon projectile (1 = valid, 0 = none) */
+void fxw_reset(void);

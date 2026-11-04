@@ -93,6 +93,7 @@ static Object *proj_hit(Objects *O, const int box[6])
         if (p->type == 0x4001) {    /* ENEMIES2: fireball stream segment box (FUN_1001a5a0): x +-8, y -8..+0x18, z +-0x10 */
             pb[0] = X - 8; pb[3] = X + 8; pb[1] = Y - 8; pb[4] = Y + 0x18; pb[2] = Z - 0x10; pb[5] = Z + 0x10;
         }
+        { int fb = fxw_proj_box(O, p, pb); if (fb == 0) continue; }   /* FXW: sonic orb: frame box 2 of the first orb only */
         if (obj_boxes_overlap(pb, box)) return p;
     }
     return NULL;
@@ -585,8 +586,8 @@ static void dummy_tick(Objects *O, Object *o)
 /* Projectiles: life = 1 while it can still hit, cool = ticks left to fly. */
 static void proj_tick(Objects *O, Object *o)
 {
+    if (fxw_proj_tick(O, o)) return;    /* FXW: bolt (FUN_1001a0f0) and sonic orbs (FUN_1001a390) */
     o->x += o->vx; o->y += o->vy;
-    if (o->type == 0x4005) o->rot[2] = (int16_t)(o->rot[2] - 0x80);   /* AUDIT: FUN_1001a0f0 spins the bolt (rot +0x74 -= 0x80) */
     if (o->script) { obj_run_script(O, o); if (!o->used) return; if (!o->script) o->script = 0; }
     if (o->variant == 1 && o->life > 0) {           /* enemy projectile (thrown by a thug) */
         int b[6] = {I(o->x) - 8, I(o->y) - 8, I(o->z) - 24, I(o->x) + 8, I(o->y) + 8, I(o->z) + 24}, pb[6];
@@ -607,51 +608,7 @@ void debris_tick(Objects *O, Object *o)
  * along the aim and destroy what they touch (-100 hp, as a projectile hit in FUN_10026de0). */
 /* SOLIDS: the weapon effect types (0x4001 / 0x4005 / 0x4006) have no ported init handler, so obj_spawn
  * refuses them; create them directly from their type info so they exist and can hit enemies. */
-static Object *weapon_obj(Objects *O, uint16_t type, int32_t x, int32_t y, int32_t z)
-{
-    uint32_t script = 0, anims, list, init; int bank = 0;
-    obj_type_info(O, type, &script, &anims, &list, &bank, &init);
-    Object *p = obj_alloc(O);
-    if (!p) return NULL;
-    p->type = type; p->x = p->px = x; p->y = p->py = y; p->z = p->pz = z;
-    p->bank = (uint8_t)bank; p->script = script; p->pairs = 0; p->idx = 0; p->timer = 0;
-    return p;
-}
-
-void enemies_player_spawns(Objects *O)
-{
-    Player *P = O->P;
-    if (!P) return;
-    for (int i = 0; i < P->nspawns; i++) {
-        const Spawn *s = &P->spawns[i];
-        Object *p = obj_spawn(O, (uint16_t)s->id, s->x, s->y, s->z);
-        if (!p) p = weapon_obj(O, (uint16_t)s->id, s->x, s->y, s->z);   /* SOLIDS */
-        if (!p) continue;
-        p->kind = K_EFFECT; p->ai = AI_PROJ; p->variant = s->id == 0x4006 ? 2 : 0;
-        p->facing = (uint8_t)s->facing;
-        p->vx = s->facing ? -FX(10) : FX(10);
-        p->cool = s->id == 0x4006 ? 60 : 24; p->life = 1;
-        p->flags54 = (p->flags54 & ~0x10u) | (p->facing & 0x10);
-        if (s->id == 0x4005) obj_sound_obj(O, 0x4811, p);   /* AUDSHELL: FUN_10019f50, the bolt's crackle follows it */
-    }
-    if (P->flame.active && (P->o.timer & 1) == 0) {
-        Object *p = obj_spawn(O, 0x4001, P->flame.x, P->flame.y, P->flame.z);
-        if (!p) p = weapon_obj(O, 0x4001, P->flame.x, P->flame.y, P->flame.z);   /* SOLIDS */
-        if (p) {
-            /* ENEMIES2: the shot angle (table 0x10054c98 +4, obj +0x74) is in the sine table's units, 0x400 per turn
-             * (0x1005a848). FUN_1001a5a0 walks the stream with x += sin(a - 0x200), y -= sin(a - 0x100), i.e.
-             * dx = -sin a, dy = cos a: 0x300 = straight ahead, 0x200 = up. */
-            float a = (float)(P->flame.angle & 0x3ff) * (6.2831853f / 1024.0f);
-            float dir = P->o.facing ? -1.f : 1.f;
-            p->kind = K_EFFECT; p->ai = AI_PROJ; p->variant = 0;
-            p->vx = (int32_t)(dir * 9.0f * 65536.0f * -__builtin_sinf(a));
-            p->vy = (int32_t)(9.0f * 65536.0f * __builtin_cosf(a));
-            p->cool = 18; p->life = 1;
-            p->facing = P->o.facing;
-            p->flags54 = (p->flags54 & ~0x10u) | (p->facing & 0x10);
-        }
-    }
-}
+void enemies_player_spawns(Objects *O) { fxw_spawns(O); }   /* FXW: moved to fxw.c (bolt / orbs / stream) */
 
 /* ---------------------------------------------------------------- dispatch */
 
@@ -694,7 +651,13 @@ void enemies_tick_proj(Objects *O, Object *o) { proj_tick(O, o); }
 int en_offscreen(Objects *O, const Object *o, int range) { return offscreen(O, o, range); }    /* ENEMIES2 */
 void en_move4(Objects *O, Object *o) { move4(O, o); }
 int en_took_hit(Objects *O, Object *o) { return took_hit(O, o); }
-int en_hits_player(Objects *O, const Object *o, int k) { return hits_player(O, o, k); }
+extern long fxb_player_ticks;
+int en_hits_player(Objects *O, const Object *o, int k)
+{
+    int r = hits_player(O, o, k);
+    if (r && getenv("FXB_LOG")) printf("FXB pt=%ld en_hits_player type %x box %d OVERLAP\n", fxb_player_ticks, o->type, k);   /* FXB */
+    return r;
+}
 void en_hurt_player(Objects *O, const Object *o, int level) { hurt_player(O, o, level); }
 void en_hit_sound(Objects *O, int sword_id) { hit_sound(O, sword_id); }
 int en_blow_damage(Objects *O) { return blow_damage(O); }

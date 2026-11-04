@@ -108,6 +108,22 @@ int level_load(Level *L, const Fs *fs, const char *name)
             memcpy(L->bg, PARAMS[i].bg, 3);
         }
     memcpy(L->pal, cif, 768);
+    /* FXL: the PC "clear" is not an RGB fill.  ENG1 FUN_10005e00 / ENG3 copy the level colour (table +8..+10) into the DRAWENV
+     * r0,g0,b0; HERCULES.EXE DrawOTag (0x40ac60, isbg = env+0x18) calls 0x406ee0, which maps (r,g,b) to the NEAREST ENTRY OF THE
+     * 256-colour palette (0x406850: squared RGB distance, first minimum wins, exact match stops) and memsets the 8-bit frame
+     * buffer with that index.  Black (TRAINING, THEBES, MEDUSA, TITANS, CYCLOPS, TORMENT) stays index 0 = black; the coloured
+     * skies snap to the palette (FOREST 0,64,128 -> idx 232 = 14,74,111; HYDRA -> 66,82,111; VORTEX -> 0,31,0; GAUNTLET ->
+     * 63,116,129).  FXL_NOSNAP=1 keeps the raw table colour. */
+    if (!getenv("FXL_NOSNAP")) {
+        int bestd = -1, besti = 0;
+        for (int i = 0; i < 256; i++) {
+            int dr = L->bg[0] - cif[i * 3], dg = L->bg[1] - cif[i * 3 + 1], db = L->bg[2] - cif[i * 3 + 2];
+            int dd = dr * dr + dg * dg + db * db;
+            if (bestd < 0 || dd < bestd) { bestd = dd; besti = i; }
+            if (!dd) break;
+        }
+        L->bg[0] = cif[besti * 3]; L->bg[1] = cif[besti * 3 + 1]; L->bg[2] = cif[besti * 3 + 2];
+    }
     L->shade = cif + 768 + 0x40000 + 0x10000;
     L->modtab = cif + 768 + 0x40000;
 

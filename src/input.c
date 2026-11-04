@@ -124,17 +124,64 @@ static int pad_dirs(SDL_GameController *pad)
     return d;
 }
 
-int input_game_bits(const InputConfig *c, const Uint8 *ks, SDL_GameController *pad)
+/* FXI: the PC host's pad aggregator (HERCULES.EXE FUN_00408040) resolves opposite directions before ENG1
+ * ever sees the pad word: "if UP then clear DOWN; if LEFT then clear RIGHT" (a PSX d-pad can't press both,
+ * so the engine never handles L+R together). Without this a keyboard player who reverses direction while
+ * the old arrow is still down (the normal way to turn around) got L+R: the walk state kept going the old way
+ * until the old key was released, and in the air the facing flipped every tick (FUN_100174e0). */
+int input_socd(int in)
+{
+    if (in & IN_UP) in &= ~IN_DOWN;
+    if (in & IN_LEFT) in &= ~IN_RIGHT;
+    return in;
+}
+
+/* FXI: FUN_00407f30 returns 0 for the whole keyboard while Alt is held (Alt+Enter is the window toggle). */
+static int alt_held(const Uint8 *ks)
+{
+    return ks && (ks[SDL_SCANCODE_LALT] || ks[SDL_SCANCODE_RALT]);
+}
+
+static int raw_game_bits(const InputConfig *c, const Uint8 *ks, SDL_GameController *pad)
 {
     static const int bit[ACT_COUNT] = {IN_UP, IN_DOWN, IN_LEFT, IN_RIGHT, IN_SWORD, IN_JUMP, IN_PUNCH, IN_POWER, IN_WEAPON};
     int in = 0;
-    if (c->keys_on && ks)
+    if (c->keys_on && ks && !alt_held(ks))
         for (int i = 0; i < ACT_COUNT; i++)
             if (c->key[i] != SDL_SCANCODE_UNKNOWN && ks[c->key[i]]) in |= bit[i];
     in |= pad_dirs(pad);
     static const int pbit[PADACT_PAUSE] = {IN_SWORD, IN_JUMP, IN_PUNCH, IN_POWER, IN_WEAPON};
     for (int i = 0; i < PADACT_PAUSE; i++) if (padbtn(pad, c->pad[i])) in |= pbit[i];
     return in;
+}
+
+int input_game_bits(const InputConfig *c, const Uint8 *ks, SDL_GameController *pad)
+{
+    return input_socd(raw_game_bits(c, ks, pad));       /* FXI */
+}
+
+/* FXI: key-down latch. The loop polls the keyboard state once per 1/30 s tick, so a tap that starts and
+ * ends between two samples (a quick turn-around or jump tap) was lost entirely: that is "the button
+ * sometimes does nothing". Every key-down event is remembered until the next tick consumes it, so a tap is
+ * always seen for at least one tick (the original's GetAsyncKeyState poll can't lose a tap that long on
+ * Windows, where key-down lasts longer than a tick; a held key behaves exactly as before). */
+static int g_latch;
+
+void input_note_key(const InputConfig *c, SDL_Scancode sc)
+{
+    static const int bit[ACT_COUNT] = {IN_UP, IN_DOWN, IN_LEFT, IN_RIGHT, IN_SWORD, IN_JUMP, IN_PUNCH, IN_POWER, IN_WEAPON};
+    if (!c->keys_on || sc == SDL_SCANCODE_UNKNOWN) return;
+    for (int i = 0; i < ACT_COUNT; i++) if (c->key[i] == sc) g_latch |= bit[i];
+}
+
+void input_latch_clear(void) { g_latch = 0; }
+
+int input_game_tick(const InputConfig *c, const Uint8 *ks, SDL_GameController *pad)
+{
+    int in = raw_game_bits(c, ks, pad);
+    if (!alt_held(ks)) in |= g_latch;
+    g_latch = 0;
+    return input_socd(in);
 }
 
 uint16_t input_menu_pad(const InputConfig *c, const Uint8 *ks, SDL_GameController *pad)
@@ -149,6 +196,7 @@ uint16_t input_menu_pad(const InputConfig *c, const Uint8 *ks, SDL_GameControlle
         if (ks[SDL_SCANCODE_RETURN] || ks[SDL_SCANCODE_KP_ENTER] || ks[SDL_SCANCODE_SPACE]) p |= PSX_START;
         if (ks[SDL_SCANCODE_ESCAPE]) p |= PSX_TRIANGLE;
     }
+    in = input_socd(in);        /* FXI: same host filter as in game */
     if (in & IN_UP) p |= PSX_UP;
     if (in & IN_DOWN) p |= PSX_DOWN;
     if (in & IN_LEFT) p |= PSX_LEFT;

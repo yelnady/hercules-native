@@ -187,6 +187,7 @@ static int bird_init(Objects *O, Object *o, uint32_t init)
     return 1;
 }
 
+static void fxb_log(Objects *O, Object *o, const char *when);
 static void bird_tick(Objects *O, Object *o, int forest)
 {
     int st = o->v2a;
@@ -294,18 +295,39 @@ static void bird_tick(Objects *O, Object *o, int forest)
         break;
     }
     if (o->v2a != 0x23) {
-        int h = en_took_hit(O, o);
-        int dead = 0;
-        if (h == 2) dead = 1;
-        else if (h == 1) { int dmg = en_blow_damage(O); if (dmg) { en_hit_sound(O, 0x10); dead = 1; } }
-        if (dead) shot_down(O, o, forest);
-        else if (en_hits_player(O, o, 1)) {
-            en_hurt_player(O, o, forest ? (o->v2a == 5 ? 0x14 : 0x12) : 0x11);   /* FUN_100266a0 */
-            if (!forest) O->t_hits += 2;                                       /* DAT_10070ef0 */
-        } else if (!forest && o->v2a != 0x26 && map_down(O, o) == 0) shot_down(O, o, 0);   /* FUN_10029e20 */
+        if (!forest && en_hits_player(O, o, 1)) {                  /* FXB: FUN_10043440 tests touching Hercules FIRST (a blow */
+            en_hurt_player(O, o, 0x11);                            /* on the same tick does not count); Forest 0x2e is the */
+            O->t_hits += 2;                                        /* other way round (FUN_10026e90 first, then touching) */
+        } else {
+            int h = en_took_hit(O, o);
+            int dead = 0;
+            if (h == 2) dead = 1;
+            else if (h == 1) { int dmg = en_blow_damage(O); if (dmg) { en_hit_sound(O, 0x10); dead = 1; } }
+            if (dead) shot_down(O, o, forest);
+            else if (forest && en_hits_player(O, o, 1))
+                en_hurt_player(O, o, o->v2a == 5 ? 0x14 : 0x12);   /* FUN_1000b3f0 -> FUN_100266a0 */
+        }
+        if (!forest && o->v2a != 0x26 && o->v2a != 0x23 && map_down(O, o) == 0) shot_down(O, o, 0);   /* FUN_10029e20 */
     }
     if (!forest) shadow_flag(O, o);
+    if (getenv("FXB_LOG")) fxb_log(O, o, "post");                   /* FXB */
     if (en_offscreen(O, o, 500)) obj_kill(O, o, 0);                 /* FUN_1002aa30(500, 0x140) -> FUN_10027260 */
+}
+
+/* FXB: FXB_LOG=1 prints, per bird and tick, state/frame, box 1 vs the player body box and the damage request. */
+static void fxb_log(Objects *O, Object *o, const char *when)
+{
+    static long tick; static const Object *last;
+    if (!last || o <= last) tick++;
+    last = o;
+    int b[6], pb[6] = {0}, have = obj_box(O, o, 1, b);
+    Box q; int hp = player_body_box(P_, &q);
+    if (hp) { pb[0] = q.x0; pb[1] = q.y0; pb[2] = q.z0; pb[3] = q.x1; pb[4] = q.y1; pb[5] = q.z1; }
+    int ov = have && hp && obj_boxes_overlap(b, pb);
+    printf("FXB t=%ld %s bird %x st=%x anim=%d frm=%d idx=%d vy=%d pos(%d,%d,%d) %s box(%d,%d,%d)-(%d,%d,%d) pbox(%d,%d,%d)-(%d,%d,%d) %s hit_req=%d inv=%d hp=%d\n",
+           tick, when, o->type, o->v2a, o->anim, o->frame, o->idx, o->v[4] >> 16, I(o->x), I(o->y), I(o->z), have ? "" : "NOBOX",
+           b[0], b[1], b[2], b[3], b[4], b[5], pb[0], pb[1], pb[2], pb[3], pb[4], pb[5], ov ? "OVERLAP" : "-",
+           P_->hit_req, P_->invuln, P_->health);
 }
 
 int fx_birds_init(Objects *O, Object *o, uint32_t init) { return bird_init(O, o, init); }

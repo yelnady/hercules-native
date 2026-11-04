@@ -268,6 +268,8 @@ int main(int argc, char **argv)
                      c == 'r' ? IN_RIGHT | IN_JUMP : c == 'l' ? IN_LEFT | IN_JUMP : 0;
                 /* COMBAT: S sword, T charge punch, D down, d down+punch, j jump+sword, k jump+punch,
                  * u jump+down, H / K = take a light / heavy hit from the right (test hook) */
+                if (c == 'B') in = IN_LEFT | IN_RIGHT;      /* FXI: opposite arrows together (host filter test) */
+                if (c == 'b') in = IN_LEFT | IN_RIGHT | IN_JUMP;
                 if (c == 'S') in = IN_SWORD;
                 if (c == 'T') in = IN_POWER;
                 if (c == 'D') in = IN_DOWN;
@@ -294,6 +296,7 @@ int main(int argc, char **argv)
                 Object *so = obj_spawn(&G.O, (uint16_t)ty, G.P.o.x + (dx << 16), G.P.o.y + (dy << 16), G.P.o.z + (dz << 16));
                 if (so) { so->facing = dx > 0 ? 0xff : 0; so->flags54 = (so->flags54 & ~0x10u) | (so->facing & 0x10); }
             }
+            if (!getenv("FXI_RAW")) in = input_socd(in);    /* FXI: the host filter applies to scripted input too (FXI_RAW=1 disables it) */
             game_tick(&G, in);
             if (getenv("INSIDE_LOG") && G.have_objects) {   /* DEPTH: audit hook, player body inside solid geometry? */
                 int px = G.P.o.x >> 16, py = G.P.o.y >> 16, pz = G.P.o.z >> 16, up, dn, ins;
@@ -395,6 +398,7 @@ int main(int argc, char **argv)
                                        G.R.w, G.R.h, SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     SDL_Renderer *ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     SDL_RenderSetLogicalSize(ren, G.R.w, G.R.h);
+    SDL_StopTextInput();    /* FXI: nothing reads SDL_TEXTINPUT; keep Cocoa's text-input / press-and-hold path off the game keys */
     SDL_Texture *tex = SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, G.R.w, G.R.h);
     SDL_GameController *pad = NULL;
     for (int i = 0; i < SDL_NumJoysticks(); i++) if (SDL_IsGameController(i)) { pad = SDL_GameControllerOpen(i); break; }
@@ -419,8 +423,10 @@ int main(int argc, char **argv)
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) running = 0;
+            else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED) input_latch_clear();   /* FXI: FUN_00408040 drops keys held across a focus change */
             else if (e.type == SDL_KEYDOWN && !e.key.repeat) {
                 SDL_Keycode k = e.key.keysym.sym;
+                input_note_key(&cfg, e.key.keysym.scancode);   /* FXI: a tap shorter than one tick must still reach the next tick */
                 fe_key(&F, e.key.keysym.scancode);
                 if (k == SDLK_RETURN && (e.key.keysym.mod & KMOD_ALT)) {
                     Uint32 fl = SDL_GetWindowFlags(win);
@@ -470,18 +476,20 @@ int main(int argc, char **argv)
         const Uint8 *ks = SDL_GetKeyboardState(NULL);
         int in = input_game_bits(&cfg, ks, pad);
         uint16_t menu_pad = input_menu_pad(&cfg, ks, pad);
+        if (F.mode != FE_PLAY) input_latch_clear();     /* FXI: taps made in menus / pause must not leak into the level */
 
         Uint64 now = SDL_GetPerformanceCounter();
         acc += (double)(now - last) / SDL_GetPerformanceFrequency();
         last = now;
         if (acc > 0.25) acc = 0.25;
-        while (acc >= tick) {
+        while (acc >= tick - 0.002) {   /* FXI: 2 ms slack, else 60 Hz frames (2 x 16.67 ms ~ 1 tick) jitter between 2- and 3-frame ticks = stutter */
             if (F.mode == FE_PLAY) {
                 if (F.start_level) {
                     int lv = F.start_level;
                     F.start_level = 0;
                     if (begin_level(&G, &F, &hud, lv)) { F.entered = 1; fe_goto_menu(&F); }
                     else { current_level = lv; deaths = 0; was_dead = 0; prev_lives = G.P.lives; }
+                    acc = tick; last = SDL_GetPerformanceCounter();    /* FXI: the load took seconds; don't replay them as a burst of ticks */
                 }
                 if (G.have_level && F.mode == FE_PLAY) {
                     if (fe_wants_demo(&F)) {            /* POLISH: attract demo playback (ENG1 FUN_10006005) */
@@ -490,6 +498,7 @@ int main(int argc, char **argv)
                         in = pad_to_in(w);
                     }
                     G.fade_on = 1;      /* PLAYER: in-game fade in / out */
+                    if (!fe_wants_demo(&F)) in = input_game_tick(&cfg, ks, pad);   /* FXI: sample once per TICK (was once per frame: catch-up ticks reused a stale word), taps latched, L/R + U/D resolved like the host */
                     G.P.cheat_lives = (F.gs.cheats & 8) != 0;
                     game_tick(&G, in);
                     hud_state.health = G.P.health; hud_state.max_health = G.P.max_health;     /* MERGE: combat -> HUD */
