@@ -396,9 +396,7 @@ static void t33_update(E3World *W, E3Obj *o)
     if (OW(o, 0x2a) & 4) {
         if (OI(o, 0xe0)) { e3_sound(W, 0x62a1, o); OI(o, 0xe0) = 0; }
         OY(o) += 0x120000;
-        int up, dn = e3_floor(W, HI(ODEP(o)), HI(OY(o)), HI(OLAT(o)), OW(o, 0x38), &up);
-        if (dn == 0 || (up < 0x7fff && up <= 0x24)) {
-            if (up < 0x7fff) OY(o) -= up << 16;
+        if (e3_landed(W, o)) {      /* LV_TORMENT: FUN_1001eaf0 (was an ad-hoc floor test) */
             e3_sound(W, 0x629b, o); OW(o, 0x2a) = 2;
         }
     }

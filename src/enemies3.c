@@ -579,10 +579,38 @@ int enemies4_tick(Objects *O, Object *o)
     return 0;
 }
 
+/* LV_THEBES: AI callback 2 = FUN_10034570, set by THEQ 0x2b (FUN_100343a0) and THFLOOD 0x2c (FUN_100348a0). It was swallowed
+ * (enemies4_callback returned without doing anything), so the earthquake girls never started their stomp animations (v2a 4,
+ * anims 6 / 0xb), the screen never shook and no 0x402a rocks fell. +0xc = projected screen x, +0x1f & 2 = on screen. */
+static void town_stomp_ai(Objects *O, Object *o)
+{
+    const Player *P = O->P;
+    if (o->v2a == 4) { o->v2a = 1; obj_set_anim(O, o, 0); return; }
+    int r = rnd(O, 0x28), dz = I(P->o.z - o->z);
+    int sx = 160 + I(o->x) - O->camx;
+    int a = -1;
+    if (sx < 0x15 || sx > 299) {                    /* off to the side */
+        if (r < 0x19) return;
+        if (r < 0x26) a = 0x10;
+        else if (dz > 0x20) return;
+        else if (r < 0x27) a = 6;
+    } else {
+        if (r < 10) return;
+        if (r < 0xf) a = 0x10;
+        else if (dz > 0x20) return;
+        else if (r < 0x1c) a = 6;
+    }
+    if (a == 0x10) { if (pe_u32(O->pe, o->anims + 4u * 0x10)) obj_set_anim(O, o, 0x10); return; }
+    if (a < 0) a = 0xb;
+    if (!pe_u32(O->pe, o->anims + 4u * (uint32_t)a)) return;     /* THFLOOD's list has no such animation */
+    obj_set_anim(O, o, a); o->v2a = 4;
+}
+
 int enemies4_callback(Objects *O, Object *o, int id)
 {
     (void)id;
     if (o->ai == AI4_HARPY) { harpy_ai(O, o); return 1; }
+    if (o->ai == AI4_TOWN && (o->variant == 4 || o->variant == 1)) { town_stomp_ai(O, o); return 1; }   /* LV_THEBES */
     return o->ai > AI4_BASE;
 }
 

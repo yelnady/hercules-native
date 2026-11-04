@@ -155,8 +155,26 @@ static Object *boss_drop(Objects *O, int32_t x, int32_t y, int32_t z, uint32_t i
 {
     const PeImage *pe = O->pe;
     int k = id & 0xf;
-    if (k == 9) k = 2;                      /* letters: handed out in order by the original; coin here */
+    /* LV_HYDRA: FUN_100131c0 id rules (the port had only 9 -> coin): 4 = health (after the first, coins; Forest-style level 9 -> 3),
+     * 10 = max-health vase becomes 3 at 0xff, 9 = the next password vase 5,6,7,8 in order then coins, a vase already held -> coin */
+    if (k == 4 && O->L->index == 9) k = 3;
+    if (k == 4) {
+        int n = enemies3_counter(0), diff = O->P ? O->P->difficulty : 1;
+        if ((diff == 0 && n > 1) || (diff > 0 && n != 0)) k = 3;
+        if (n < 6) enemies3_counter_set(0, n + 1);
+    }
+    if (k == 10 && O->health_max == 0xff) k = 3;
+    if (k == 9) {
+        int v = enemies3_counter(1);
+        if (v < 2) { k = 5; v = 2; } else if (v == 2) { k = 6; v = 4; } else if (v == 4) { k = 7; v = 8; }
+        else if (v == 8) { k = 8; v = 0x10; } else k = 2;
+        enemies3_counter_set(1, v);
+    }
+    { int bit = k == 5 ? 1 : k == 6 ? 2 : k == 7 ? 4 : k == 8 ? 8 : 0; if (O->letters & bit) k = 2; }
+    if (k == 1) O->coins14_total++;
+    if (k == 2) O->coins18_total++;
     uint16_t type = pe_u16(pe, 0x10052b90 + 8u * (uint32_t)k);
+    if (getenv("DROP_LOG")) printf("DROP id %x -> k %d type %04x\n", (unsigned)id, k, type);   /* LV_HYDRA */
     if (!type) return NULL;
     Object *o = bspawn(O, 0x4012, x, y, z, R_DROP);
     if (!o) return NULL;
@@ -803,7 +821,8 @@ static void draw_frame(Objects *O, Renderer *R, const Object *o, int bank, int f
 void boss_draw(Objects *O, Renderer *R, Object *o)
 {
     if (hydra_draw(O, R, o)) return;
-    if (o->ai == R_MEDUSA_GAZE) return;                         /* FX2: gaze parts are drawn as chains by medusa_draw_beams */
+    if (o->ai == R_MEDUSA_GAZE && o->type == 0x2032) return;   /* LV_MEDUSA: only the gaze rig parts; the rule hid smoke, flames, snakes, bones and the floor pool too */
+    /* FX2: gaze parts are drawn as chains by medusa_draw_beams */
     if (B.level == 7 && o->w[11] == 1) return;                  /* hidden (flags54 bit 31 clear) */
     if (o->flags54 & 0x10000000) {                              /* 3D map model */
         if (o->x || o->y || o->z) boss_model_draw(O, R, o);

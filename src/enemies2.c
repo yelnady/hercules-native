@@ -229,6 +229,8 @@ static void rock_shatter(Objects *O, Object *r)
     }
 }
 
+void thebes_rock_shatter(Objects *O, Object *r) { rock_shatter(O, r); }   /* LV_THEBES: FUN_10025190 (the port's rock_shatter has 8..18 pieces, the original 24..31) */
+
 static void mino_init(Objects *O, Object *o)                       /* FUN_10024270 */
 {
     O->mino_seq = 0xffff;
@@ -272,6 +274,7 @@ static void mino_tick(Objects *O, Object *o)
         }
     }
     if (touch_player(O, o)) en_hurt_player(O, o, 3);
+    { Object *r = thebes_loose_rock(O); if (r && overlap(O, r, o)) { thebes_rock_shatter(O, r); obj_kill(O, r, 0); } }   /* LV_THEBES: FUN_10024320 tail */
 }
 
 /* FUN_100244d0 (callback 6) */
@@ -379,6 +382,7 @@ static void boulder_tick(Objects *O, Object *o)
     }
     o->y -= 0x180000; o->py -= 0x180000;
     if (touch_player(O, o)) en_hurt_player(O, o, 3);
+    { Object *r = thebes_loose_rock(O); if (r && overlap(O, r, o)) { thebes_rock_shatter(O, r); obj_kill(O, r, 0); } }   /* LV_THEBES: FUN_10024f50 tail */
     if (o->z < -0x800000 || o->z > 0x1f00000 || en_offscreen(O, o, 0x80)) obj_kill(O, o, 1);
 }
 
@@ -428,6 +432,7 @@ static void eqrock_tick(Objects *O, Object *o)
 static void thebes_frame(Objects *O)
 {
     int32_t x = P_->o.x, y = P_->o.y;
+    { static int tk, done; if (getenv("THEBES_MINO_KILL") && !done && ++tk >= atoi(getenv("THEBES_MINO_KILL")) && O->mino && O->mino->used) { done = 1; O->mb_active = 1; mino_damage(O, 300); } }   /* LV_THEBES: test hook */
     if (!O->mb_active && O->mino && O->mino->used && O->mino_v2a < 8 && x > 0x15100000 && x < 0x17800000 && y > 0x4400000) {
         O->mb_active = 1; O->mb_bar = 0xff; O->hud_boss_cmd = HUD_BOSS_START_MB;
     }
@@ -997,7 +1002,7 @@ static void water_init(Objects *O, Object *o)                       /* FUN_1000d
         o->rot[1] = pe_s16(O->pe, a + 16); o->scale = pe_u16(O->pe, a + 20);
         break;
     }
-    obj_sound(O, 0x8ca, o->x);
+    obj_sound_obj(O, 0x8ca, o);      /* LV_FOREST: FUN_10006da0(0x8ca, obj) - owned by the water so the loop stops when it is culled (was position-only, owner 1: looped forever, one more voice per respawn) */
     o->b23 = 5;                                                     /* vertex callback 5 (ripple) - drawn rigid */
     o->flags54 |= 5;
     o->ai = AI2_WATER; o->pairs = 0; o->idx = 0; o->timer = 0;

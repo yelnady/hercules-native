@@ -112,6 +112,7 @@ static void medusa_hide_beam(int b)                            /* FUN_10022400 *
 
 static void medusa_after_gaze(Objects *O, Object *m)            /* FUN_100220c0 (callback 5) */
 {
+    if (getenv("MED_LOG")) printf("MED t=%ld after gaze hurt=%d lives=%d\n", B.tick, M.hurt, M.lives);   /* LV_MEDUSA log */
     if (M.lives < 1) {
         Object *d = mspawn(O, 0x31, 0, 0x2f00000, 0x2780000, R_MEDUSA);
         if (d) {                                                /* FUN_100213c0 */
@@ -267,7 +268,7 @@ static void medusa_rocks(Objects *O, Object *m)                 /* FUN_10021aa0:
 
 static void medusa_tick(Objects *O, Object *m)                  /* FUN_10021320 */
 {
-    M.t--; M.frame--;
+    if (m->variant != 1) { M.t--; M.frame--; }                  /* LV_MEDUSA: FUN_10021400 (dying Medusa 0x31) does not count the timers; only FUN_10021320 does (they ran twice per tick) */
     if (m->variant == 1) {                                      /* 0x31: the dying Medusa, FUN_10021400 */
         obj_run_script(O, m);
         m->x = O->P->o.x;
@@ -302,9 +303,10 @@ static void medusa_tick(Objects *O, Object *m)                  /* FUN_10021320 
     m->x = O->P->o.x;
     if (m->v2a == 1) medusa_gaze(O, m);
     else if (m->v2a == 2) medusa_rocks(O, m);
-    M.shake = M.quake;
-    if (M.shake && (M.frame & 1) == 0) M.shake = -M.shake;      /* DAT_10070cbc camera shake */
-    O->cam_dy = M.shake;                                        /* LEFTOVERS: wired to game.c's camera */
+    int sh = M.quake;                                           /* LV_MEDUSA: FUN_10021320: DAT_1006fde0 (set to 3 by rock/shield impacts) is a */
+    if (M.shake > 0) { M.shake--; sh = 0xa0000; }               /* tick counter giving a 10 px shake; it was overwritten by the quake value each tick */
+    if (sh && (M.frame & 1) == 0) sh = -sh;                     /* DAT_10070cbc camera shake */
+    O->cam_dy = sh;                                             /* LEFTOVERS: wired to game.c's camera */
 }
 
 void boss_callback(Objects *O, Object *o, int id)
@@ -325,6 +327,7 @@ void boss_callback(Objects *O, Object *o, int id)
         int32_t v = s32(pe, M.pat);
         while (v < 0) { M.pat = M.pat_base; v = s32(pe, M.pat); }
         M.pat += 4;
+        if (getenv("MED_LOG")) printf("MED t=%ld pattern %d\n", B.tick, v);   /* LV_MEDUSA log */
         obj_set_anim(O, o, v == 0 ? 2 : v == 1 ? 6 : 5);
         break;
     }
@@ -336,6 +339,7 @@ void boss_callback(Objects *O, Object *o, int id)
         break;
     }
     case 4: {                                                   /* FUN_10021f60: the gaze starts */
+        if (getenv("MED_LOG")) printf("MED t=%ld gaze start\n", B.tick);   /* LV_MEDUSA log */
         obj_sound(O, 0x1c7, o->x);
         o->v2a = 1;
         obj_sound(O, 0x1c8, o->x);
@@ -440,6 +444,13 @@ static void medusa_skel_tick(Objects *O, Object *s)             /* FUN_10023b30 
             hit_sound(O, 0x27a);
             s->inv = 5;
         } else if (k == 2) { s->hp = (int16_t)(s->hp - 0x80); obj_sound(O, 0xd1de, s->x); s->inv = 5; }
+        if (s->inv == 5 && s->hp < 1 && obj_rnd(O, 8) == 0) {  /* LV_MEDUSA: FUN_10023b30: the killing blow sometimes draws a Hercules line (speech 0x27..0x29) */
+            static int last_line;
+            int n = obj_rnd(O, 3);
+            if (n == last_line && --n < 0) n = 2;
+            last_line = n;
+            sfx_speech(O->fs, 0x27 + n);
+        }
     }
     if (s->hp < 1 || M.lives <= 0) {
         obj_sound(O, 0xd1df, s->x);
@@ -488,6 +499,7 @@ static void medusa_misc_tick(Objects *O, Object *o)            /* 0x202a / 0x202
         if (o->scale <= 5 || o->scale > 0x8000) { bkill(O, o); return; }
         o->x += FX(o->w[0]); o->y += FX(o->w[1]); o->w[1]++; o->z += FX(o->w[2]);
         if (o->w[3] == 2) {
+            { static unsigned cnt; if ((cnt++ & 0xf) == 0) { int k = obj_rnd(O, 3); if (k < 3) obj_sound(O, (uint16_t)(0xd1e7 + k), o->x); } }   /* LV_MEDUSA: FUN_10022c20 rubble clatter, every 16th puff (DAT_1006fe50) */
             if (I(o->y) < 0x2d8) return;
             o->w[0] >>= 1; o->w[2] >>= 1; o->w[1] = -(o->w[1] >> 1); o->y = FX(o->w[1] + 0x2d8);
             if (++o->w[4] >= 4) bkill(O, o);
@@ -520,6 +532,7 @@ static void medusa_misc_tick(Objects *O, Object *o)            /* 0x202a / 0x202
     }
     case 5: {                                                   /* FUN_10023460: a snake */
         if ((M.frame & 3) == 0 && ++o->frame > 0x85) o->frame = 0x82;
+        if (getenv("MED_LOG") && (B.tick % 10) == 0) printf("MED t=%ld snake x %d y %d z %d st %d w0 %d life %d\n", B.tick, I(o->x), I(o->y), I(o->z), o->v2a, o->w[0], o->w[2]);   /* LV_MEDUSA log */
         const Obj *p = &O->P->o;
         if (!ring_hits_player(O, o, 1)) {
             Object *t = mspawn(O, 0x202c, o->x, o->y, o->z, R_MEDUSA_GAZE);

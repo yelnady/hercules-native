@@ -229,6 +229,7 @@ static int took_hit(Objects *O, Object *o)
     Box ab;
     if (player_attack_box(P_, &ab)) {
         int a[6] = {ab.x0, ab.y0, ab.z0, ab.x1, ab.y1, ab.z1};
+        if (getenv("HIT_LOG")) printf("HIT_LOG solid type %x atk (%d,%d,%d)-(%d,%d,%d) body (%d,%d,%d)-(%d,%d,%d) %s\n", o->type, a[0], a[1], a[2], a[3], a[4], a[5], b[0], b[1], b[2], b[3], b[4], b[5], obj_boxes_overlap(a, b) ? "OVERLAP" : "miss");   /* LV_FOREST: verification only */
         if (obj_boxes_overlap(a, b)) return 1;
     }
     return 0;
@@ -536,7 +537,9 @@ int solids_init(Objects *O, Object *o, uint32_t init, uint32_t update)
         int r[6];
         if (model_box(O->L, o, 0, r)) { for (int i = 0; i < 6; i++) o->box88[i] = (int16_t)r[i]; o->has88 = 1; }
         drop_floor(O, o);
-        o->y -= FX(pe_s16(O->pe, 0x10052e76));
+        /* LV_THEBES: FUN_10014210 lifts the rock by DAT_100530de (32), not the drum's DAT_10052e76 (48): the rock hung 16 px in the
+         * air, Hercules walked under it and could neither touch nor lift it (the minotaur fight's throwing rock). */
+        o->y -= FX(pe_s16(O->pe, init == I_ROCK5 ? 0x100530de : 0x10052e76));
         break;
     }
     case I_DECOR: {                                                 /* FUN_10040a50 */
@@ -801,6 +804,8 @@ static void block_tick(Objects *O, Object *o)                      /* FUN_100148
     uint32_t TX = rock ? 0x100530d8 : 0x10052e70, TY = rock ? 0x10052c0a : 0x10052e72;
     uint32_t HC = rock ? 0x10052c0e : 0x10052e76, HD = rock ? 0x100530de : 0x10052e76;
     o->flags54 &= ~0x30u;
+    if (rock && getenv("THEBES_LOG")) printf("ROCK5 kind %d frame %d has88 %d box88 %d,%d,%d,%d,%d,%d attr %d pos %d,%d,%d s9a %d fl50 %x carried %d pose %d\n", o->kind, o->frame, o->has88, o->box88[0], o->box88[1], o->box88[2], o->box88[3], o->box88[4], o->box88[5], o->attr, I(o->x), I(o->y), I(o->z), o->s9a, o->flags50, P->carried == o, P->carry_pose);   /* LV_THEBES: test log */
+    if (rock && o->s9a != 3 && o->s9a != 5) o->flags50 &= ~0x800000u;   /* LV_THEBES: FUN_100142d0 states 0/1 clear the "thrown" flag (DAT_10071be0 list) */
     if (o->airborne) { drop_floor(O, o); if (!o->airborne) o->y -= FX(pe_s16(pe, HD)); return; }
     int held = P->carried == o;
     if (held && o->s9a == 0) o->s9a = 1;
@@ -836,6 +841,24 @@ static void block_tick(Objects *O, Object *o)                      /* FUN_100148
         o->v[5] = o->v[4] = 0x10000; o->v[7] = 0x6000; o->v[6] = 0;
         o->v[8] = o->v[9] = 0;
         o->s9a = 3;
+        if (rock) o->flags50 |= 0x940000u;                          /* LV_THEBES: FUN_100142d0 state 2 */
+    }
+    if (o->s9a == 4 && rock) {                                      /* LV_THEBES: FUN_100142d0 state 4: thrown up, flagged 0x800000 (hurts the minotaur) */
+        o->zface = 0; o->b95 = 0xff; o->facing = P->o.facing;
+        o->flags50 = (o->flags50 & ~0x140000u) | 0x800000u;
+        o->v[1] = o->v[0] = 0; o->v[5] = o->v[4] = 0xc0000; o->v[7] = 0x6000; o->v[6] = 0;
+        o->v[9] = o->v[8] = 0x40000; o->v[3] = 0x6000; o->v[2] = 0;
+        o->s9a = 5;
+    }
+    if (o->s9a == 5) {                                              /* LV_THEBES: state 5: drifts on towards the arena, shatters on landing */
+        o->y += FX(pe_s16(pe, HD));
+        if (o->x < 0x15600000) o->x += 0x20000;
+        int r = phys(O, o);
+        if (!(r & 1) && (o->z < 0xc00000 || o->y < 0x4400000)) {
+            o->y -= FX(pe_s16(pe, HD));
+            if (!o->b95) { o->v[5] = 0xa0000; o->v[6] = 0x40000; o->v[7] = 0; }
+        } else { thebes_rock_shatter(O, o); obj_kill(O, o, 1); }
+        return;
     }
     if (o->s9a == 4) {                                              /* thrown upwards / dropped */
         o->zface = 0; o->b95 = 0xff; o->facing = P->o.facing;

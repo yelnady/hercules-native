@@ -286,7 +286,7 @@ int e3_anim(E3World *W, E3Obj *o)
         case -0x0e: if (OS(o, 0x11e) < 0) OS(o, 0x11e) = (int16_t)-OS(o, 0x11e); OI(o, 0xf8) = 0; break;
         case -0x0d: if (OS(o, 0x11e) > 0) OS(o, 0x11e) = (int16_t)-OS(o, 0x11e); OI(o, 0xf8) = 0; break;
         case -0x0c: e3_set_anim(W, o, arg); ret = 1; break;
-        case -0x07: case -0x06: e3_remove(W, o); return ret;
+        case -0x07: case -0x06: if (getenv("E3_OPLOG") && v == -7) printf("e3op type %#x op -7\n", OW(o, 0x2e)); e3_remove(W, o); return ret;
         case -0x04:     /* next animation in the list (FUN_1001e280) */
             if (OU(o, 0x110)) {
                 int n = OS(o, 0x114) + 1;
@@ -298,7 +298,9 @@ int e3_anim(E3World *W, E3Obj *o)
         case -0x01: OS(o, 0x32) = -1; ret = 1; break;
         case -0x03: OU(o, 0x54) ^= 0x10; break;
         case -0x02: OB(o, 0x94) = (uint8_t)~OB(o, 0x94); break;
-        default: break;     /* -5 / -8 / -10 / -11 / -0x1f / -0x2e / -0x2f: effects and callbacks per type */
+        default:     /* -5 / -8 / -10 / -11 / -0x1f / -0x2e / -0x2f: effects and callbacks per type */
+            if (getenv("E3_OPLOG")) printf("e3op type %#x op %d arg %#x\n", OW(o, 0x2e), v, (uint16_t)arg);   /* LV_GAUNTLET: test log */
+            break;
         }
     }
     return ret;
@@ -1242,11 +1244,27 @@ void eng3_game_start(Game *G)
         for (int p = 0; p < 16; p++) for (int k = 0; k < W->nsp[p]; k++) if (ty < 0 || ((W->sp[p][k].type & 0x1ff) == ty && !(W->sp[p][k].type & 0x7000)))
             printf("sp type %#x path %d d %d y %d l %d\n", W->sp[p][k].type, p, HI(W->sp[p][k].d), HI(W->sp[p][k].y), HI(W->sp[p][k].l));
     }
+    if (getenv("LV_CYC_H2")) for (int t = 0; t < 0x20; t++)   /* LV_CYCLOPS: test-only, class 0x2000 / 0x4000 handler tables */
+        printf("pool2 %#x init=%08x upd=%08x ti=%08x bank=%d | pool4 init=%08x upd=%08x ti=%08x\n", t, d32(W, W->thand2 + 8u * t), d32(W, W->thand2 + 8u * t + 4), d32(W, W->tinfo2 + 8u * t), d8(W, W->tinfo2 + 8u * t + 6),
+               d32(W, W->thand4 + 8u * t), d32(W, W->thand4 + 8u * t + 4), d32(W, W->tinfo4 + 8u * t));
     if (getenv("E3_AUDIT")) {   /* ENG3B: per-type spawn audit */
         int cnt[0x200] = {0};
         for (int p = 0; p < 16; p++) for (int k = 0; k < W->nsp[p]; k++) if (!(W->sp[p][k].type & 0x7000)) cnt[W->sp[p][k].type & 0x1ff]++;
         for (int t = 0; t < 0x200; t++) if (cnt[t]) {
             uint32_t ti = W->tinfo + 16u * (uint32_t)t, th = W->thand + 12u * (uint32_t)t;
+            if (getenv("E3_OPSCAN")) {   /* LV_GAUNTLET: test-only static scan of the type's anim scripts for ops the port ignores */
+                uint32_t al = d32(W, ti + 4);
+                for (int n = 0, z = 0; al && n < 60 && z < 3; n++) {
+                    uint32_t sc = d32(W, al + 4u * n);
+                    if (!sc) { z++; continue; }
+                    z = 0;
+                    for (int k = 0; k < 300; k++) {
+                        int16_t v = ds16(W, sc + 4u * k), a = ds16(W, sc + 4u * k + 2);
+                        if (v == -5 || v == -8 || v == -10 || v == -11 || v == -0x1f || v == -0x2e || v == -0x2f || v == -7) printf("  scan type %#x anim %d idx %d op %d arg %#x\n", t, n, k, v, (uint16_t)a);
+                        if (v == -1 || v == -6 || v == -7 || v == -4) break;
+                    }
+                }
+            }
             printf("type %#x n=%d bank=%d init=%08x upd=%08x upd2=%08x script=%08x anims=%08x\n", t, cnt[t], d8(W, ti + 12),
                    d32(W, th), d32(W, th + 4), d32(W, th + 8), d32(W, ti), d32(W, ti + 4));
         }
@@ -1425,6 +1443,7 @@ void eng3_game_tick(Game *G, int in)
                 int w = t == 0x2b ? 100 : 80;
                 if (od < -16 || od > (t == 0x2b || t == 0x2a ? 0x220 : 0x140) || abs(ol - l) > w) continue;
                 int t1 = ol + w + 20, t2 = ol - w - 20;
+                if (getenv("E3_AUTODBG")) printf("dodge type %x od %d ol %d l %d t1 %d t2 %d\n", t, od, ol, l, t1, t2);   /* LV_TORMENT: debug */
                 int ok1 = FL(d + 32, t1) && FL(d + 32, (l + t1) / 2), ok2 = FL(d + 32, t2) && FL(d + 32, (l + t2) / 2);
                 if (ok1 && (!ok2 || l >= ol)) target = t1; else if (ok2) target = t2;     /* go round on the side Hercules is already on */
                 slow = 0;
@@ -1582,7 +1601,36 @@ void eng3_game_tick(Game *G, int in)
     if (W->state == 1 || W->state == 0) OI(o, 0xd8) = OY(o);
     /* objects */
     activate(W);
-    for (int i = 1; i < E3_MAXOBJ; i++) if (W->obj[i].used) e3_type_update(W, &W->obj[i]);
+    for (int i = 1; i < E3_MAXOBJ; i++) if (W->obj[i].used) {
+        E3Obj *ob = &W->obj[i];
+        /* LV_TORMENT: FUN_1001b9f0 stores the previous position (+0x9c/+0xa0/+0xa4) of every actor right before its update
+         * (unless +0x50 bit 0x800). The landing tolerance of FUN_1001eaf0 / FUN_10001600 is built from that per-tick delta;
+         * without it falling rocks / souls / debris used a stale spawn position. Torment only (other ENG3 levels untouched). */
+        if (W->level == 10 && !(OU(ob, 0x50) & 0x800)) { OI(ob, 0x9c) = ODEP(ob); OI(ob, 0xa0) = OY(ob); OI(ob, 0xa4) = OLAT(ob); }
+        e3_type_update(W, ob);
+        if (W->level == 10 && getenv("E3_TRACE") && OW(ob, 0x2e) == (int)strtol(getenv("E3_TRACE"), NULL, 0) && ob->used)   /* LV_TORMENT: test hook, per-tick trace of one type */
+            printf("trace t=%ld obj %d type %x d %d y %d l %d st %x fr %d  hero d %d y %d\n", W->ticks, i, OW(ob, 0x2e), HI(ODEP(ob)), HI(OY(ob)), HI(OLAT(ob)), OW(ob, 0x2a), OW(ob, 0x34), HI(ODEP(PL)), HI(OY(PL)));
+    }
+    if (getenv("LV_CYC_GHOST") && W->ticks % 300 == 0) {   /* LV_CYCLOPS: test-only, objects left on a path Hercules has left */
+        int n = 0, tot = 0, ty[8] = {0};
+        for (int i = 1; i < E3_MAXOBJ; i++) if (W->obj[i].used) { tot++; if (OW(&W->obj[i], 0x38) != OW(PL, 0x38)) { if (n < 8) ty[n] = OW(&W->obj[i], 0x2e); n++; } }
+        printf("GHOST t=%ld path %d total %d other-path %d first types %x %x %x %x\n", W->ticks, OW(PL, 0x38), tot, n, ty[0], ty[1], ty[2], ty[3]);
+    }
+    if (getenv("LV_CYC_TRACK")) {   /* LV_CYCLOPS: test-only, report objects that never change while near Hercules */
+        static struct { int used, ty; int32_t d, y, l; uint16_t st, fr; long since; int rep; } tr[E3_MAXOBJ];
+        for (int i = 1; i < E3_MAXOBJ; i++) {
+            E3Obj *o = &W->obj[i];
+            if (!o->used) { tr[i].used = 0; continue; }
+            if (!tr[i].used || tr[i].ty != OW(o, 0x2e)) { tr[i].used = 1; tr[i].ty = OW(o, 0x2e); tr[i].since = W->ticks; tr[i].rep = 0; tr[i].d = ODEP(o) - 1; }
+            if (tr[i].d != ODEP(o) || tr[i].y != OY(o) || tr[i].l != OLAT(o) || tr[i].st != OW(o, 0x2a) || tr[i].fr != OW(o, 0x34)) {
+                tr[i].d = ODEP(o); tr[i].y = OY(o); tr[i].l = OLAT(o); tr[i].st = OW(o, 0x2a); tr[i].fr = OW(o, 0x34); tr[i].since = W->ticks; }
+            int rel = HI(ODEP(o) - ODEP(PL));
+            if (W->ticks - tr[i].since > 90 && !tr[i].rep && rel > -100 && rel < 600) {
+                tr[i].rep = 1;
+                printf("FROZEN t=%ld type %#x slot %d d=%d y=%d l=%d st=%#x fr=%#x rel=%d\n", W->ticks, tr[i].ty, i, HI(ODEP(o)), HI(OY(o)), HI(OLAT(o)), OW(o, 0x2a), OW(o, 0x34), rel);
+            }
+        }
+    }   /* LV_CYCLOPS */
     if (getenv("SCROLL_TEST") && W->ticks == 10) { W->letters |= 5; e3_scroll_trigger(W, atoi(getenv("SCROLL_TEST"))); }   /* AUDSHELL: test hook */
     if (W->scr) { ScrollCfg c = e3_scr_cfg(W); scrolls_tick(W->scr, &c, e3_scr_sound, W); }   /* AUDSHELL */
     /* sounds */

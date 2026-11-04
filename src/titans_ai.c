@@ -393,7 +393,7 @@ static void tornado_titan(Object *o)   /* FUN_1003a040 (0x2b tornado) */
     case 0x39:
         play(o);
         o->w[0]++;
-        if (o->w[0] > 200) { titan_gone(o); return; }
+        if (o->w[0] > 200) { titan_gone(o); obj_sound_stop(gO, 0x256); return; }   /* LV_TITANS: never leave the loop running */
         if ((o->w[0] & 0xf) == 0 && o->w[0] < 0xa0) {
             Object *p = spawn(0x5b, C.ax - 0x960000, FX(rnd(0x1e) - 300 + o->w[0] * 2) + C.ay, C.az);
             if (p) { anim(p, (o->w[0] >> 4) & 1); play(p); }
@@ -401,7 +401,12 @@ static void tornado_titan(Object *o)   /* FUN_1003a040 (0x2b tornado) */
         break;
     }
     o->x = (int32_t)((((int64_t)(C.titan_cam - C.camx)) << 16) / 0xc) + 0x1900000;
-    if (o->x < -0x280000) { C.tornado_lock = -1; C.titan_cam = 0; kill(o); }
+    if (o->x < -0x280000) {
+        C.tornado_lock = -1; C.titan_cam = 0; kill(o);
+        /* LV_TITANS: FUN_1003a040 sets DAT_10064474 = -1 here; the wind object 0x38 (FUN_1003a4a0) then calls
+         * FUN_10007f8e(0x256, 0) = stops the tornado's looping wind sound that FUN_10039f20 started (it looped for ever) */
+        obj_sound_stop(gO, 0x256);
+    }
 }
 
 /* ----------------------------------------------------------- projectiles */

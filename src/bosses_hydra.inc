@@ -54,6 +54,8 @@ static struct {
     int quake;                      /* DAT_1006f180 */
     int landed;                     /* DAT_1006f454 */
     int first_cut;                  /* DAT_1006f3e4 */
+    int rockhit, shake;             /* LV_HYDRA: DAT_1006f3d0 (a quake rock landed) / DAT_1006f450 */
+    int cutmask;                    /* LV_HYDRA: DAT_1006f3d4 */
     int loop;                       /* DAT_1006f3e8 */
     int frame;                      /* DAT_1006f45c */
     int snd_cut, snd_grow;          /* DAT_1006f464 / DAT_1006f460 */
@@ -324,7 +326,9 @@ static void hy_head_hits(Objects *O, int k)
     int a[6] = {ab.x0, ab.y0 - 0x40, -0x10000, ab.x1, ab.y1, 0x10000};
     if (!obj_boxes_overlap(a, hb)) return;
     if (!player_hit_damage(O->P, (uint16_t)(0x18 & ~O->P->consumed)) && !getenv("BOSS_WEAK")) return;   /* sword only */
-    int id = drop_list_next(O);
+    int id = 0;                                                 /* LV_HYDRA: FUN_1001b370 - the first cut of neck 0/2/4/6 always drops id 9 (a password vase), later cuts use the list */
+    if (k == 0 || k == 2 || k == 4 || k == 6) { int bit = 1 << (k / 2); if (!(H.cutmask & bit)) { H.cutmask |= bit; id = 9; } }
+    if (!id) id = drop_list_next(O);
     if (id) boss_drop(O, hd->x, hd->y, O->P->o.z, (uint32_t)id | (k < 2 ? 0x220u : k > 4 ? 0x240u : 0x280u));
     obj_sound(O, (uint16_t)(0x5985 + obj_rnd(O, 3)), hd->x);
     /* FUN_1001d6c0: cut */
@@ -333,6 +337,7 @@ static void hy_head_hits(Objects *O, int k)
     Object *st = bspawn(O, 0x30, hd->x, hd->y, hd->z, R_HYDRA_FX);   /* FUN_1001df50 */
     if (st) { st->variant = 3; st->frame = 0x15; st->timer = 3; h->stump = st; }
     H.heads_left--;
+    if (getenv("HYDRA_LOG")) printf("HYDRA cut head %d, left %d (regrow %d)\n", k, H.heads_left, H.regrow);   /* LV_HYDRA */
     if (H.heads_left < 1) B.dead = 1;
     bar_hit(O, H.heads_left < 1 ? B.bar : 0x20);
     boss_bar(O, H.heads_left, 8);
@@ -447,7 +452,7 @@ static void hy_fx_tick(Objects *O, Object *o)
         if (o->y < 0x3d80000 && !hit) break;
         if (hit) player_damage(O->P, 0, o->x, o->y, o->z, 0);
         else o->y = 0x3d80000;
-        H.quake = H.quake > 0 ? H.quake : 0;
+        if (o->variant == 4) H.rockhit = 1;                     /* LV_HYDRA: FUN_1001e3f0 sets DAT_1006f3d0 = 1 when a quake rock lands */
         int r9 = obj_rnd(O, 9);
         if (o->variant == 5 || obj_rnd(O, 2) == 0) obj_sound(O, (uint16_t)(r9 < 3 ? 0x188 : r9 < 6 ? 0x189 : 0x18a), o->x);
         if (o->variant == 5) {
@@ -467,6 +472,13 @@ static void hy_fx_tick(Objects *O, Object *o)
             if (++H.landed == 1) { obj_sound(O, 0x19f, o->x); obj_sound(O, 0x193, o->x); }
         }
         break;
+    case 7: {                                                   /* LV_HYDRA: 0x34 / 0x35 (FUN_1001dac0 / 1001daf0, 1001db40 / 1001db70): bank 79 sprites cycling frames 0x50..0x5d / 0x60..0x67 while z drops 7 per tick; gone below z 64 */
+        int top = o->w[5];                                      /* last frame + 1 (0x5e / 0x68), restart value in w[6] */
+        if (--o->timer < 1) { o->frame++; o->timer = 1; if (o->frame >= top) o->frame = o->w[6]; }
+        o->z -= 7 * 0x10000;
+        if (o->z < 0x400000) bkill(O, o);
+        break;
+    }
     default: break;
     }
 }
@@ -487,6 +499,11 @@ static void hydra_start(Objects *O)                             /* FUN_1001ac10 
     int d = O->P->difficulty; if (d < 0 || d > 2) d = 1;
     drop_list_set(DROPS[d]);
     boss_bar(O, H.heads_left, 8);
+    if (getenv("HYDRA_TESTDROP")) for (int q = 0; q < 6; q++) boss_drop(O, O->P->o.x + FX(40), O->P->o.y - FX(40), O->P->o.z, 9u | 0x220u);   /* LV_HYDRA: test hook */
+    for (int q = 0; q < 2; q++) {                               /* LV_HYDRA: FUN_1001ac10 ends with the two 0x34 / 0x35 sprites */
+        Object *s = bspawn(O, q ? 0x35 : 0x34, q ? 0x8e00000 : 0x8600000, 0x3ee0000, 0x2800000, R_HYDRA_FX);
+        if (s) { s->variant = 7; s->timer = 1; s->frame = q ? 0x60 : 0x50; s->w[5] = q ? 0x68 : 0x5e; s->w[6] = s->frame; }
+    }
 }
 
 static void hydra_level_tick(Objects *O)                        /* FUN_1001ae00 + FUN_1001e140 */
@@ -509,6 +526,7 @@ static void hydra_level_tick(Objects *O)                        /* FUN_1001ae00 
     if (H.quake > 0) {                                          /* the cliffs come down */
         H.quake--;
         if ((H.frame & 3) == 0) {
+            fx_spawn(O, 0x202d, FX(obj_rnd(O, 0x1000)), 0xc00000, (0x100 - obj_rnd(O, 0x80)) * 0x10000, 0, 0, 1, 1);   /* LV_HYDRA: FUN_1001e140 also spawns a 0x202d puff per rock */
             Object *r = bspawn(O, 0x2f, FX(obj_rnd(O, 0x1000)), 0xc00000, (0x100 - obj_rnd(O, 0x80)) * 0x10000, R_HYDRA_FX);
             if (r) {
                 static const int FR[4] = {0x42, 0x44, 0x40, 0x45};
@@ -517,6 +535,9 @@ static void hydra_level_tick(Objects *O)                        /* FUN_1001ae00 
             }
         }
     }
+    H.shake = H.quake > 0 ? 0x30000 : 0;                        /* LV_HYDRA: FUN_1001e140 -> DAT_10070cbc camera shake (alternates sign every tick) */
+    { int sh = H.shake; if (H.rockhit > 0) { H.rockhit--; sh = 0x90000; }
+      O->cam_dy = (sh && (H.frame & 1) == 0) ? -sh : sh; }
     if (H.heads_left >= 1) return;
     switch (H.final_state) {                                    /* FUN_1001ae00: boulders finish her */
     case 0: H.final_t = 0x3c; H.quake = 900; H.final_state = 1; break;

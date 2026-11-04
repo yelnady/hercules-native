@@ -874,17 +874,109 @@ static void d4004_update(E3World *W, E3Obj *o)  /* FUN_100152c0 */
     if (ODEP(o) < ODEP(PL) - 0x200000) e3_remove(W, o);
 }
 
+/* ---------------------------------------------------------------- 0x30 rock fall (LV_TORMENT: moved here from e3types.c) */
+/* FUN_100266a0 / FUN_10026770. The old port skipped the five 0x3b bones thrown ahead when the rock gets close, the
+ * 0x2016 sparkle + four 0x4002 debris on the first bounce, and used its own floor test instead of FUN_10001600. */
+static void t30_init(E3World *W, E3Obj *o)
+{
+    (void)W;
+    OU(o, 0x54) |= 0x10000040; OU(o, 0x50) = 0x202;
+    OW(o, 0x2a) = 8; OW(o, 0x98) = 1; OI(o, 0xe0) = 0; OS(o, 0x116) = 0; OS(o, 0x11e) = 1;
+    OB(o, 0x95) = 0;
+    OI(o, 0xbc) = 0x1e0000; OI(o, 0xac) = 0; OI(o, 0xcc) = 0xf0000; OI(o, 0xb8) = 0;
+    OI(o, 0xc0) = 0x20000; OI(o, 0xc4) = 0xffff;
+    OS(o, 0x30) = 10; OW(o, 0x9a) = 0;
+    OB(o, 0x22) = 0; OW(o, 0x34) = 2; OS(o, 0x72) = 0x100;
+    OY(o) -= 0x4000000;
+    OW(o, 0x3a) = 0x200; OW(o, 0x4a) = 0xfe;
+    OI(o, 0xdc) = 1;
+    OI(o, 0xd8) = (int32_t)rnd(0x10) + 0x60;
+}
+static void t30_update(E3World *W, E3Obj *o)
+{
+    int16_t r[3]; rel(o, PL, r);
+    if (r[0] < 0x484 && OS(o, 0x11e)) {                          /* five bones thrown out ahead of the rock */
+        for (int k = 0; k < 5; k++) {
+            int32_t l = (int32_t)(rnd(0xf) - rnd(0xf)) * 0x10000 + OLAT(o);
+            int32_t y = (int32_t)(rnd(0x20) * 0x10000) - (int32_t)(rnd(0x20) * 0x10000) + OY(o);
+            int32_t d = (int32_t)(rnd(0x14) - rnd(0x14)) * 0x10000 + ODEP(o);
+            E3Obj *b = spawn(W, 0x3b, d, y, l, OW(o, 0x38));
+            if (!b) continue;
+            int32_t v = (int32_t)((rnd(0x10) + 0x14) * 0x10000) - (int32_t)(rnd(0x10) * 0x10000);
+            OI(b, 0xbc) = v; OI(b, 0xb8) = v; OI(b, 0xa8) = 0; OI(b, 0xc8) = 0;
+            OB(b, 0x22) = 4; OI(b, 0xc4) = 0x8000; OS(b, 0x32) = 0; OI(b, 0xac) = 0; OI(b, 0xcc) = 0;
+            OW(b, 0x3a) = (uint16_t)(rnd(0x40) + 0x100); OW(b, 0x4a) = 0xa0; OB(b, 0x95) = 0;
+        }
+        OS(o, 0x11e) = 0;
+    }
+    if (r[0] < 1000 && OS(o, 0x116) == 0) { e3_sound(W, 0x6280, o); OW(o, 0x2a) = 4; OS(o, 0x116) = 1; }
+    if (r[2] > -0x20 && r[2] < 0x20 && r[0] > -0x20 && r[0] < 0x20 && r[1] != 0x20 && r[1] < 0x20) hit(W, o, 0x31);
+    if (OW(o, 0x2a) & 4) {
+        OS(o, 0x72) += (int16_t)OI(o, 0xd8);
+        if (OW(o, 0x9a)) {                                       /* a bounce happened on the last tick */
+            OI(o, 0xd8) >>= 1;
+            if (OI(o, 0xdc)) { e3_sound(W, 0xe281, o); OI(o, 0xdc) = 0; }
+            if (OW(o, 0x98) == 1) {
+                sparkle(W, ODEP(o) - 0x800000, OY(o), OLAT(o));
+                for (int k = 0; k < 4; k++) {
+                    E3Obj *d = e3_spawn(W, 0x4002, ODEP(o), (int32_t)rnd(0x200000) + OY(o), (int32_t)rnd(0x200000) + OLAT(o), OW(o, 0x38));
+                    if (!d) continue;
+                    set_prev(d); TFLAG(d) = 0;
+                    dirs(d, k, 0);
+                }
+                OW(o, 0x98) = 0;
+            }
+        }
+        if (fall(W, o, 1)) { OI(o, 0xd8) = 0; OW(o, 0x2a) = 2; OW(o, 0x34) = 3; }
+    }
+    if (e3_offscreen(W, o, 0x100)) e3_remove(W, o);
+}
+
+/* ---------------------------------------------------------------- 0x47 collapsing ceiling (LV_TORMENT: moved here from e3types2.c) */
+/* FUN_10029e50 / FUN_10029ea0. The old port left the 0x4002 debris to init on their first update, which threw away the
+ * original's post-init tweak (+0xbc >>= 1, +0xac >>= 4) and set directions for all 16 pieces (the original only for the first 8). */
+static void t47_init(E3World *W, E3Obj *o)
+{
+    (void)W;
+    OU(o, 0x50) = 0x400202; OB(o, 0x22) = 0; OW(o, 0x34) = 10; OU(o, 0x54) |= 0x10000040;
+    OY(o) -= 0x600000;
+    OS(o, 0x72) = 0x200; OW(o, 0x3a) = 0x180;
+    OS(o, 0x11e) = 0; OW(o, 0x98) = 1; OW(o, 0x4a) = 0xfe;
+}
+static void t47_update(E3World *W, E3Obj *o)
+{
+    int16_t r[3]; rel(o, PL, r);
+    if (r[0] < 0x200) {
+        W->shake = 1;      /* FUN_10008120: screen rumble */
+        if (OW(o, 0x98)) {
+            e3_sound(W, 0x2a2, o);
+            for (int k = 0; k < 16; k++) {
+                int32_t l = (int32_t)(rnd(0x100) * 0x10000) - (int32_t)(rnd(0x100) * 0x10000) + OLAT(o);
+                int32_t y = OY(o) - (int32_t)(rnd(0x40) * 0x10000) - 0x800000;
+                E3Obj *c = e3_spawn(W, 0x4002, ODEP(o), y, l, OW(PL, 0x38));
+                if (!c) continue;
+                set_prev(c); d4002_init(W, c); TFLAG(c) = 1;
+                OW(c, 0x4a) = 200; OI(c, 0xbc) >>= 1; OI(c, 0xac) >>= 4;
+                if (k < 8) dirs(c, k & 3, 0);      /* pieces 8..15 keep the default direction */
+            }
+            OW(o, 0x98) = 0;
+        }
+        OY(o) += (int32_t)(rnd(4) * -0x10000) - 0x8000;
+    }
+    gone(W, o);
+}
+
 /* ---------------------------------------------------------------- dispatch */
 
 typedef struct { int type; void (*init)(E3World *, E3Obj *); void (*update)(E3World *, E3Obj *); } TFn;
 static const TFn TT[] = {
     {0x29, t29_init, t29_update}, {0x2a, t2a_init, t2a_update}, {0x2b, t2b_init, t2b_update},
-    {0x2e, t2e_init, t2e_update}, {0x2f, t2f_init, t2f_update}, {0x31, t31_init, t31_update},
+    {0x2e, t2e_init, t2e_update}, {0x2f, t2f_init, t2f_update}, {0x30, t30_init, t30_update}, {0x31, t31_init, t31_update},
     {0x32, t31_init, t31_update}, {0x35, t35_init, t35_update}, {0x36, t36_init, t36_update},
     {0x37, t37_init, t36_update}, {0x3b, t3b_init, t3b_update}, {0x3c, t3c_init, NULL},
     {0x3d, t3d_init, t3d_update}, {0x3e, t3e_init, t3e_update}, {0x3f, t3f_init, t3f_update},
     {0x40, t40_init, t40_update}, {0x41, t41_init, t41_update}, {0x43, t43_init, t43_update},
-    {0x45, t45_init, t45_update}, {0x46, t46_init, t46_update},
+    {0x45, t45_init, t45_update}, {0x46, t46_init, t46_update}, {0x47, t47_init, t47_update},
     {0x2016, s2016_init, s2016_update}, {0x4002, d4002_init, d4002_update}, {0x4004, d4004_init, d4004_update},
 };
 static const TFn *tfind(E3World *W, int t)

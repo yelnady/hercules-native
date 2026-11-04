@@ -382,6 +382,7 @@ int sfx_dump_wavs(const char *dir)
     for (int id = 0; id < MAX_FX; id++) {
         const Sound *s = &S.snd[id];
         if (!s->pcm) continue;
+        if (s->loop && getenv("SFX_LOOPS")) printf("LOOPSND fx=%d\n", id);   /* LV_FOREST: verification only */
         char path[512];
         snprintf(path, sizeof path, "%s/PC_%d.wav", dir, id);
         FILE *f = fopen(path, "wb");

@@ -578,6 +578,7 @@ void obj_collect(Objects *O, uint16_t type)    /* BOSSES: exported */
 {
     Player *P = O->P;       /* PLAYER: FUN_10012ef0 changes the gamestruct the player reads (health +0x24, max +0x1e, lives +0xc, ammo +0x26..+0x2c) */
     if (P && P->dying) return;
+    if (getenv("LV_LOG") && P) printf("LV_LOG collect %04x (ammo %d %d %d, lives %d, health %d)\n", type, P->ammo[1], P->ammo[2], P->ammo[3], P->lives, P->health);   /* LV_TITANS */
     switch (type) {
     case 0x2002: O->health_max += 0x20; if (O->health_max > 0xff) O->health_max = 0xff; if (P) P->max_health = O->health_max; break;
     case 0x2012: if (++O->lives > 9) O->lives = 9; if (P && ++P->lives > 9) P->lives = 9; snd(O, 0xc03d); break;
@@ -604,8 +605,13 @@ void obj_collect(Objects *O, uint16_t type)    /* BOSSES: exported */
     }
 }
 
+static int lv_cnt;   /* LV_TITANS */
 static void upd_pickup(Objects *O, Object *o, const int pbox[6])   /* FUN_10012d80 */
 {
+    if (getenv("LV_LOG") && O->L->index == 9) {   /* LV_TITANS */
+        int b[6]; int ok = world_box(O, o->bank, o->frame, (o->flags54 & 0x10) != 0, o->x, o->y, o->z, b);
+        if (abs(I(o->x) - pbox[0]) < 150 && (lv_cnt++ % 10) == 0) printf("LV_LOG pickup %04x box(%d) x %d..%d y %d..%d z %d..%d  peg x %d..%d y %d..%d z %d..%d\n", o->type, ok, b[0], b[3], b[1], b[4], b[2], b[5], pbox[0], pbox[3], pbox[1], pbox[4], pbox[2], pbox[5]);
+    }
     if (touch_player(O, o, pbox, 0)) {
         collect(O, o);
         become_effect(O, o, TYPE_SPARKLE);

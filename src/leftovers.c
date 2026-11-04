@@ -397,11 +397,26 @@ static void shadow_tick(Objects *O, Object *o)                     /* FUN_10035f
 
 /* ---------------------------------------------------------------- spawners and zones */
 
+/* LV_THEBES: DAT_10071a18 (the last ticked spawner 0x48) + 0x60 = its loose rock; the minotaur and its boulders smash it
+ * (FUN_10024320 / FUN_10024f50: type match and DAT_1007201c == 0, i.e. Hercules is not holding it). */
+Object *thebes_loose_rock(Objects *O)
+{
+    if (O->P && O->P->carrying) return NULL;
+    for (int i = 0; i < OBJ_MAX; i++) {
+        Object *o = &O->obj[i];
+        if (!o->used || o->ai != AI5_SPAWNER || !o->kid[0]) continue;
+        Object *c = o->kid[0];
+        if (c->used && c->type == (uint16_t)o->d[4]) return c;
+    }
+    return NULL;
+}
+
 static void spawner_tick(Objects *O, Object *o)                    /* FUN_100103c0 */
 {
     Object *c = o->kid[0];
     if (c && (!c->used || c->type != (uint16_t)o->d[4])) c = o->kid[0] = NULL;
-    if (O->L->index == 5 && O->mino_v2a == 9 && P_->o.x > 0x700000) {   /* the minotaur is beaten: the rocks go */
+    /* LV_THEBES: FUN_100103c0 tests the player's z (DAT_1007217c + 8 > 0x700000), not x */
+    if (O->L->index == 5 && O->mino_v2a == 9 && P_->o.z > 0x700000) {   /* the minotaur is beaten: the rocks go */
         if (c) obj_kill(O, c, 0);
         obj_kill(O, o, 1);
         return;

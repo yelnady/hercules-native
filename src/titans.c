@@ -10,7 +10,8 @@
  *                 0x78-tick countdown that ends the level (game state 0x31). */
 #include "game.h"
 #include "objects_int.h"
-#include "titans_ai.h"   /* TITANS2 */
+#include "titans_ai.h"
+#include "sfx.h"   /* TITANS2 */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -155,6 +156,7 @@ static void peg_hurt(Game *G, int level)
 void titans_start(Game *G, int x, int y, int z)
 {
     TitansState *T = &G->T;
+    sfx_stop(0x246, 0); sfx_stop(0x256, 0);   /* LV_TITANS: a restart (death) removes the Titans; their lava / tornado loops must not keep playing */
     memset(T, 0, sizeof *T);
     if (!T->bank.d) bank_load(&T->bank, G->fs, "P:\\SRC1\\ALIEN2\\PEGASUS\\ANIMPSX.BIN");
     T->active = 1;
@@ -278,6 +280,10 @@ void titans_tick(Game *G, uint16_t pad, uint16_t pressed)
         if (T->y > T->zeus_y - 60 * 65536) pad |= PAD_UP; else if (T->y < T->zeus_y - 120 * 65536) pad |= PAD_DOWN;
     }
     if (getenv("TITANS_AUTO") && G->have_objects) pad = titans_pilot(G, pad);   /* TITANS3 test pilot */
+    if (getenv("LV_TP") && T->ticks == 20) {   /* LV_TITANS test hook: LV_TP=x,y teleports Pegasus (the anchor follows) */
+        int tx = 0, ty = 0; sscanf(getenv("LV_TP"), "%d,%d", &tx, &ty);
+        T->ax += FX(tx) - T->x; T->x = FX(tx); T->y = FX(ty); if (T->ay > T->y) T->ay = T->y;
+    }
     /* FUN_100377f0 */
     if ((pad & PAD_DOWN) && T->vy < 0x78000) T->vy += 0x20000;
     if ((pad & PAD_UP) && T->vy > -0x78000) T->vy -= 0x20000;

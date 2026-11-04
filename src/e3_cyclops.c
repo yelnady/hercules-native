@@ -1075,12 +1075,74 @@ static void t48_update(E3World *W, E3Obj *o)
     if (offs(W, o, 0x100)) kill(W, o);
 }
 
+/* ---------------------------------------------------------------- checkpoint statues 0x200b..0x2014 (LV_CYCLOPS) */
+/* FUN_100165f0 (init) / FUN_10016670 (update, disassembled). The statue of checkpoint n = (type + 6) & 0xf. It is inactive
+ * (script 0x10037c00, frames 0xeb / 0xe6..0xea) until Hercules comes within 0x2bc rows of it on the same path; then it
+ * plays the chime 0x6028 (only when its state word is non-zero, i.e. not while it was already the current one),
+ * switches to the active script 0x10037ba8 (frames 0xec..) and makes itself the restart point (gamestruct[2]).
+ * Any other statue becoming current sends this one back to the inactive script. The port never set W->cp, so every
+ * death restarted the level at path 0 depth 0 (table 0x10038534 +0x18 per checkpoint: path 1 / path 2 start for n = 2 / 3).
+ * The sparkle shower (0x201b children, FUN_100168b0 / 100168f0, spawned on odd ticks while current) is not ported. */
+#define CP_ACTIVE 0x10037ba8u
+#define CP_IDLE 0x10037c00u
+static int cp_index(E3Obj *o) { return (OW(o, 0x2e) + 6) & 0xf; }
+static void cp_reset(E3Obj *o) { OS(o, 0x30) = 0; OS(o, 0x32) = 0; }          /* FUN_1001e2d0 */
+static void wscript(E3World *W, E3Obj *o)      /* FUN_1001e000: word script, frame list with a common delay in word 0 */
+{
+    uint32_t sc = OU(o, 0x64);
+    if (!sc) return;
+    OS(o, 0x30)--;
+    if (OS(o, 0x30) >= 0) return;
+    int16_t v;
+    for (int guard = 0; guard < 64; guard++) {
+        OS(o, 0x32)++;
+        v = tab16(W, sc + 2u * (uint32_t)OS(o, 0x32));
+        if (v >= 0) break;
+        switch (v) {
+        case -0x28: OS(o, 0x32)++; e3_sound(W, (uint16_t)tab16(W, sc + 2u * (uint32_t)OS(o, 0x32)), o); break;
+        case -0x27: OS(o, 0x32)++; e3_sound(W, (uint16_t)tab16(W, sc + 2u * (uint32_t)OS(o, 0x32)), NULL); break;
+        case -9: OS(o, 0x32)++; OS(o, 0x30) = tab16(W, sc + 2u * (uint32_t)OS(o, 0x32)); break;
+        case -6: case -7: e3_remove(W, o); return;
+        case -3: OU(o, 0x54) ^= 0x10; break;
+        case -1: OS(o, 0x32) = 0; break;
+        default: break;
+        }
+    }
+    OW(o, 0x34) = (uint16_t)v;
+    if (OS(o, 0x30) < 0) OS(o, 0x30) = tab16(W, sc);
+}
+static void cp_init(E3World *W, E3Obj *o)
+{
+    OU(o, 0x50) = 2;
+    OU(o, 0x64) = W->cp == cp_index(o) ? CP_ACTIVE : CP_IDLE;
+    OW(o, 0x2a) = 1;
+    cp_reset(o);
+    wscript(W, o);
+    OY(o) = 0x1a00000;
+}
+static void cp_update(E3World *W, E3Obj *o)
+{
+    int16_t r[3]; rel(o, PL, r);
+    if (OU(o, 0x64) == CP_IDLE) {
+        if (r[0] < 0x2bc && OW(o, 0x38) == OW(PL, 0x38)) {
+            if (OW(o, 0x2a)) { e3_sound(W, 0x6028, o); OW(o, 0x2a) = 0; }
+            OU(o, 0x64) = CP_ACTIVE;
+            W->cp = cp_index(o);
+            if (getenv("LV_CYC_CPLOG")) printf("CHECKPOINT %d reached t=%ld path %d d=%d\n", W->cp, W->ticks, OW(PL, 0x38), HI(ODEP(PL)));
+            cp_reset(o);
+        } else OW(o, 0x2a) = (uint16_t)(OW(o, 0x2a) + 4);
+    } else if (W->cp != cp_index(o)) { OU(o, 0x64) = CP_IDLE; cp_reset(o); }
+    wscript(W, o);
+    if (o->used && offs(W, o, 0x100)) kill(W, o);
+}
+
 /* ---------------------------------------------------------------- dispatch */
 
 int cyc_type_init(E3World *W, E3Obj *o)
 {
     int t = OW(o, 0x2e);
     grp[o - W->obj].owner = 0;
+    if (t >= 0x200b && t <= 0x2014) { cp_init(W, o); return 1; }      /* LV_CYCLOPS */
     switch (t) {
     case 0x2a: t2a_init(W, o); return 1;
     case 0x2b: case 0x2e: case 0x45: column_init(W, o, t); return 1;
@@ -1109,6 +1171,7 @@ int cyc_type_update(E3World *W, E3Obj *o)
     int t = OW(o, 0x2e);
     if (t == 0x29) { cyclops_update(W, o); return 1; }
     if (t == 0x2016) { dust_update(W, o); return 1; }
+    if (t >= 0x200b && t <= 0x2014) { cp_update(W, o); return 1; }      /* LV_CYCLOPS */
     if (t & 0x4000) {
         int ix = t & 0xfff;
         if (ix == 2 || ix == 3 || ix == 4) { debris_update(W, o); return 1; }

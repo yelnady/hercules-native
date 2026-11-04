@@ -46,6 +46,8 @@ void en_hurt_player(Objects *O, const Object *o, int level);
 void en_hit_sound(Objects *O, int sword_id);
 int en_blow_damage(Objects *O);
 void en_drop_pickup(Objects *O, const Object *o, int id);
+void thebes_rock_shatter(Objects *O, Object *r);
+Object *thebes_loose_rock(Objects *O);            /* LV_THEBES: leftovers.c */   /* LV_THEBES: FUN_10025190 */
 Object *en_drop_pickup_obj(Objects *O, const Object *o, int id);   /* TITANS3 */
 void en_player_box6(const Player *P, int b[6]);
 int enemies2_init(Objects *O, Object *o, uint32_t init);         /* 1 if handled */
