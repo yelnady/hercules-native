@@ -18,9 +18,19 @@ Known gaps:
 - Hydra stage lighting, the checkpoint sparkle shower and the pickup glow are not ported.
 - Many enemies and objects have been verified against the original code only in headless scripted runs; expect rough edges. Bug reports are welcome (include the build line shown in the menu corner).
 
-## Getting the game
+## Getting the game and extracting the files
 
-This project can't tell you where to download the game, and it will never host or link to copies. The 1997 PC CD-ROM release is out of print; legitimate routes are your own original disc (rip it to an ISO) or a second-hand copy. Once you have the disc image, extract the files listed below.
+This project can't tell you where to download the game, and it never hosts or links to copies. The 1997 PC CD-ROM release is out of print; the legitimate routes are your own original disc (rip it to an ISO with any disc tool) or a second-hand copy. From a disc image you need these files:
+
+| File | Where it is on the disc |
+|---|---|
+| `DATA/*.ETV` (cutscene videos, optional) | plain files in the `DATA` folder of the disc |
+| `HERCULES.FS`, `ENG1.DLL`, `ENG3.DLL`, `TITLE.DLL` (and `HERCULES.HLP`) | packed inside the installer archive `DATA32.Z` (InstallShield 3 format) |
+
+1. Mount or extract the ISO (on macOS: double-click it, then copy the contents to a folder).
+2. Unpack `DATA32.Z` with an InstallShield 3 extractor. The disc-root `HERCULES.EXE` is only a placeholder; the real files come out of the archive. (Running the Windows installer on a PC also leaves them in the install folder.) An unpacker script is not in this repo yet; contributions welcome.
+3. Put the results in one folder: `HERCULES.FS`, `ENG1.DLL`, `ENG3.DLL`, `TITLE.DLL`, and the `DATA` folder next to them.
+4. Point the engine at that folder (see below).
 
 ## Why there is no ready-made `.app` (or game files) in this repo
 
