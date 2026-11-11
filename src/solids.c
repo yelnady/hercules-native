@@ -539,7 +539,10 @@ int solids_init(Objects *O, Object *o, uint32_t init, uint32_t update)
         drop_floor(O, o);
         /* LV_THEBES: FUN_10014210 lifts the rock by DAT_100530de (32), not the drum's DAT_10052e76 (48): the rock hung 16 px in the
          * air, Hercules walked under it and could neither touch nor lift it (the minotaur fight's throwing rock). */
-        o->y -= FX(pe_s16(O->pe, init == I_ROCK5 ? 0x100530de : 0x10052e76));
+        /* LV_TRAINING: the Training/Forest 0x02 rock hung the same way under the drum lift, so Hercules walked under it and
+         * could never push or lift it (the Training ledge rock). Rest its model box on the floor instead. */
+        if (init == I_ROCK2 && o->has88) o->y -= FX(o->box88[1] + o->box88[4]);
+        else o->y -= FX(pe_s16(O->pe, init == I_ROCK5 ? 0x100530de : 0x10052e76));
         break;
     }
     case I_DECOR: {                                                 /* FUN_10040a50 */
@@ -801,8 +804,11 @@ static void block_tick(Objects *O, Object *o)                      /* FUN_100148
      * 0x100530d8, pose y at 0x10052c0a, carry height DAT_10052c0e, drop height DAT_100530de. Both add the pose-0
      * x offset (e70 / e72, d8 / c0a by facing) that the earlier port left out. */
     int rock = o->init_fn == I_ROCK5;
-    uint32_t TX = rock ? 0x100530d8 : 0x10052e70, TY = rock ? 0x10052c0a : 0x10052e72;
-    uint32_t HC = rock ? 0x10052c0e : 0x10052e76, HD = rock ? 0x100530de : 0x10052e76;
+    /* LV_TRAINING: the Training/Forest 0x02 rock (update FUN_10013d70) has its own pose table at 0x10052c08 (x, y +2,
+     * rotations +4/+6/+8, 10 bytes per pose) and carry/drop height DAT_10052c0e; the crate table made it float above his hands. */
+    int rock2 = o->init_fn == I_ROCK2;
+    uint32_t TX = rock ? 0x100530d8 : rock2 ? 0x10052c08 : 0x10052e70, TY = rock ? 0x10052c0a : rock2 ? 0x10052c0a : 0x10052e72;
+    uint32_t HC = rock || rock2 ? 0x10052c0e : 0x10052e76, HD = rock ? 0x100530de : rock2 ? 0x10052c0e : 0x10052e76;
     o->flags54 &= ~0x30u;
     if (rock && getenv("THEBES_LOG")) printf("ROCK5 kind %d frame %d has88 %d box88 %d,%d,%d,%d,%d,%d attr %d pos %d,%d,%d s9a %d fl50 %x carried %d pose %d\n", o->kind, o->frame, o->has88, o->box88[0], o->box88[1], o->box88[2], o->box88[3], o->box88[4], o->box88[5], o->attr, I(o->x), I(o->y), I(o->z), o->s9a, o->flags50, P->carried == o, P->carry_pose);   /* LV_THEBES: test log */
     if (rock && o->s9a != 3 && o->s9a != 5) o->flags50 &= ~0x800000u;   /* LV_THEBES: FUN_100142d0 states 0/1 clear the "thrown" flag (DAT_10071be0 list) */

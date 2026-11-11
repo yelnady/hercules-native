@@ -18,5 +18,6 @@ __pycache__/
 assets/
 videos/
 analysis/
+game/
 screenshots/
 .DS_Store
